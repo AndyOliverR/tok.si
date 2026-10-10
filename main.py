@@ -46,6 +46,7 @@ BETA_ROOT = Path.home() / ".toksi" / "seed-vc"
 BETA_PYTHON = BETA_ROOT / ".venv" / "Scripts" / "python.exe"
 LEVEL_GATE = 0.015
 HEADSET_WORDS = ("HEADSET", "HEADPHONE", "AIRPOD", "BLUETOOTH", "BUDS", "EARBUD", "HANDS-FREE")
+SETUP_STEPS = ("welcome", "voices", "cable", "headset", "microphone")
 SKIP_TEXT = {
     "thanks for watching",
     "thank you for watching",
@@ -118,6 +119,7 @@ def load_state():
         "improve": False,
         "beta": False,
         "mic_ready": False,
+        "setup_step": "welcome",
     }
     try:
         saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
@@ -131,6 +133,8 @@ def load_state():
     base["improve"] = bool(base.get("improve"))
     base["beta"] = bool(base.get("beta"))
     base["mic_ready"] = bool(base.get("mic_ready"))
+    if base.get("setup_step") not in SETUP_STEPS:
+        base["setup_step"] = "welcome"
     return base
 
 
@@ -274,6 +278,181 @@ class EqualizerWidget(QWidget):
             painter.drawRoundedRect(x, y, bar_width, height, 2, 2)
 
 
+class SetupWizard(QDialog):
+    def __init__(self, host):
+        super().__init__(host)
+        self.host = host
+        self.voices_done = threading.Event()
+        self.voices_ok = False
+        self.voices_running = False
+        self.install_finished = threading.Event()
+        self.install_ok = False
+        self.install_running = False
+        self.action_mode = "next"
+        self.setWindowTitle("tok.si")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        self.words = QLabel()
+        self.words.setWordWrap(True)
+        layout.addWidget(self.words)
+        self.apps = QHBoxLayout()
+        for label, target in (
+            ("Zoom", "zoommtg://"),
+            ("Meet", "https://meet.google.com"),
+            ("Slack", "slack://"),
+            ("WhatsApp", "whatsapp://"),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, url=target: host.open_call_app(url))
+            self.apps.addWidget(button)
+        self.app_row = QWidget()
+        self.app_row.setLayout(self.apps)
+        self.app_row.hide()
+        layout.addWidget(self.app_row)
+        self.action = QPushButton("NEXT")
+        self.action.clicked.connect(self.on_action)
+        layout.addWidget(self.action)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.poll)
+        self.timer.start(300)
+        self.show_step()
+
+    def set_action(self, label, mode, enabled):
+        self.action.setText(label)
+        self.action_mode = mode
+        self.action.setEnabled(enabled)
+
+    def show_step(self):
+        step = self.host.state.get("setup_step", "welcome")
+        self.app_row.hide()
+        if step == "welcome":
+            self.words.setText(
+                "The other person will hear an American voice. You will hear them in your headset."
+            )
+            self.set_action("NEXT", "next", True)
+        elif step == "voices":
+            self.start_voices()
+        elif step == "cable":
+            self.show_cable()
+        elif step == "headset":
+            self.words.setText("Put on your headset.")
+            self.set_action("NEXT", "next", True)
+        else:
+            self.words.setText(
+                "In your call app, set only the microphone to CABLE Output (VB-Audio Virtual Cable). "
+                "Leave the speaker on your headset."
+            )
+            self.app_row.show()
+            self.set_action("I DID THAT", "done", True)
+
+    def start_voices(self):
+        if self.voices_running or self.voices_done.is_set():
+            return
+        self.voices_running = True
+        self.words.setText("Getting the voices. Keep this window open.")
+        self.set_action("NEXT", "wait", False)
+        threading.Thread(target=self._voices, daemon=True).start()
+
+    def _voices(self):
+        try:
+            import fetch_assets
+            fetch_assets.ensure_voices()
+            self.voices_ok = True
+        except Exception as exc:
+            log(f"voices failed: {exc}")
+            self.voices_ok = False
+        self.voices_running = False
+        self.voices_done.set()
+
+    def show_cable(self):
+        import fetch_assets
+        if fetch_assets.cable_present():
+            self.words.setText("The cable is already installed.")
+            self.set_action("NEXT", "next", True)
+            return
+        self.words.setText("Windows will ask to install a virtual cable. Press APPROVE, then press Yes.")
+        self.set_action("APPROVE", "approve", True)
+        if "--install-cable" in sys.argv and is_admin() and not self.install_running:
+            self.begin_install()
+
+    def begin_install(self):
+        if self.install_running:
+            return
+        self.install_running = True
+        self.install_finished.clear()
+        self.words.setText("Installing the cable. Stay on this window.")
+        self.set_action("NEXT", "wait", False)
+        threading.Thread(target=self._install, daemon=True).start()
+
+    def _install(self):
+        try:
+            import fetch_assets
+            fetch_assets.ensure_cable()
+            self.install_ok = True
+        except Exception as exc:
+            log(f"cable failed: {exc}")
+            self.install_ok = False
+        self.install_running = False
+        self.install_finished.set()
+
+    def poll(self):
+        step = self.host.state.get("setup_step", "welcome")
+        if step == "voices" and self.voices_done.is_set():
+            if self.voices_ok and self.action_mode != "next":
+                self.words.setText("The voices are ready.")
+                self.set_action("NEXT", "next", True)
+            elif not self.voices_ok and self.action_mode != "retry":
+                self.words.setText("The voices did not download. Stay online and press TRY AGAIN.")
+                self.set_action("TRY AGAIN", "retry", True)
+        if step != "cable":
+            return
+        import fetch_assets
+        if fetch_assets.cable_present() and self.action_mode != "next":
+            self.words.setText("The cable is ready.")
+            self.set_action("NEXT", "next", True)
+        elif self.install_finished.is_set() and not fetch_assets.cable_present() and self.action_mode != "approve":
+            self.words.setText("The cable is not available yet. Press APPROVE again.")
+            self.set_action("APPROVE", "approve", True)
+
+    def on_action(self):
+        if self.action_mode == "next":
+            self.advance()
+        elif self.action_mode == "approve":
+            self.approve_cable()
+        elif self.action_mode == "retry":
+            self.voices_done.clear()
+            self.start_voices()
+        elif self.action_mode == "done":
+            self.host.state["mic_ready"] = True
+            save_state(self.host.state)
+            self.host.push_line("HEADSET READY. TALK WHEN THE CALL STARTS.")
+            self.accept()
+
+    def advance(self):
+        step = self.host.state.get("setup_step", "welcome")
+        nxt = SETUP_STEPS[SETUP_STEPS.index(step) + 1]
+        self.host.state["setup_step"] = nxt
+        save_state(self.host.state)
+        self.show_step()
+
+    def approve_cable(self):
+        self.host.state["setup_step"] = "cable"
+        save_state(self.host.state)
+        if not is_admin():
+            if "--install-cable" not in sys.argv:
+                sys.argv.append("--install-cable")
+            try:
+                self.host.server.close()
+            except Exception:
+                pass
+            if relaunch_elevated() > 32:
+                time.sleep(0.4)
+                os._exit(0)
+            self.words.setText("Windows needs a Yes before the cable can be installed.")
+            return
+        self.begin_install()
+
+
 class ToksiApp(QMainWindow):
     def __init__(self, server):
         super().__init__()
@@ -304,6 +483,7 @@ class ToksiApp(QMainWindow):
         self.refresh_buttons()
         self.push_line("TOK.SI READY")
         self.mic_flag = threading.Event()
+        self.setup_done = threading.Event()
         self.accept_thread = threading.Thread(target=self.accept_loop, daemon=True)
         self.accept_thread.start()
         self.ui_timer = QTimer(self)
@@ -556,69 +736,27 @@ class ToksiApp(QMainWindow):
             self.push_line("OPEN THAT APP YOURSELF")
 
     def prepare_then_run(self):
+        if not self.state.get("mic_ready"):
+            self.mic_flag.set()
+            self.setup_done.wait()
         try:
             import fetch_assets
-            if self.manifest is None:
-                self.status_queue.put("GETTING THE VOICES")
-            fetch_assets.ensure_voices()
-            if not fetch_assets.cable_present():
-                if not is_admin():
-                    self.status_queue.put("APPROVE THE CABLE INSTALLER")
-                    try:
-                        self.server.close()
-                    except Exception:
-                        pass
-                    if relaunch_elevated() > 32:
-                        time.sleep(0.4)
-                        os._exit(0)
-                    self.status_queue.put("CABLE NEEDS APPROVAL")
-                else:
-                    self.status_queue.put("INSTALLING THE CABLE")
-                    fetch_assets.ensure_cable()
-            fetch_assets.ensure_shortcuts()
-            self.manifest = self.read_manifest()
-            if not self.state.get("mic_ready") and fetch_assets.cable_present():
-                self.mic_flag.set()
+            if fetch_assets.cable_present():
+                fetch_assets.ensure_shortcuts()
         except Exception as exc:
             log(f"setup failed: {exc}")
             self.status_queue.put("SETUP DID NOT FINISH")
+        self.manifest = self.read_manifest()
         self.engine_loop()
 
-    def maybe_show_mic_steps(self):
-        if self.state.get("mic_ready"):
-            return
-        self.show()
-        self.raise_()
-        box = QDialog(self)
-        box.setWindowTitle("tok.si")
-        layout = QVBoxLayout(box)
-        words = QLabel(
-            "Put on your headset.\n\n"
-            "Open your call app and set only the microphone to\n"
-            "CABLE Output (VB-Audio Virtual Cable).\n\n"
-            "Leave the speaker on your headset.\n"
-            "Then come back and press I DID THAT."
-        )
-        words.setWordWrap(True)
-        layout.addWidget(words)
-        apps = QHBoxLayout()
-        for label, target in (
-            ("Zoom", "zoommtg://"),
-            ("Meet", "https://meet.google.com"),
-            ("Slack", "slack://"),
-            ("WhatsApp", "whatsapp://"),
-        ):
-            button = QPushButton(label)
-            button.clicked.connect(lambda _checked=False, url=target: self.open_call_app(url))
-            apps.addWidget(button)
-        layout.addLayout(apps)
-        done = QPushButton("I DID THAT")
-        done.clicked.connect(box.accept)
-        layout.addWidget(done)
-        if box.exec() == QDialog.Accepted:
-            self.state["mic_ready"] = True
-            save_state(self.state)
-            self.push_line("HEADSET READY. TALK WHEN THE CALL STARTS.")
+    def show_setup_wizard(self):
+        try:
+            if not self.state.get("mic_ready"):
+                self.show()
+                self.raise_()
+                SetupWizard(self).exec()
+        finally:
+            self.setup_done.set()
 
     def note_local_miss(self):
         if not self.state.get("improve") or not self.last_line:
@@ -941,7 +1079,7 @@ class ToksiApp(QMainWindow):
                 self.last_line_at = time.time()
         if self.mic_flag.is_set():
             self.mic_flag.clear()
-            self.maybe_show_mic_steps()
+            self.show_setup_wizard()
         if self.show_flag.is_set():
             self.show_flag.clear()
             self.showNormal()

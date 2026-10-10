@@ -10,15 +10,13 @@ Download the Windows app from the latest release:
 
 https://github.com/AndyOliverR/tok.si/releases/latest
 
-Unzip it, open the `tok.si` folder, and double-click `tok.si.exe`. The first time, it gets the voices and Windows asks you to approve the virtual cable. The same window then tells you the one microphone change.
+Unzip `tok.si-windows.zip` and double-click `tok.si.exe`. The window leads you through the voices, the cable, the headset, and the one microphone change.
 
-If you are running the source folder, right-click `setup.bat` and choose **Run as administrator**. `build_exe.bat` rebuilds that app folder on this PC.
+If you are running the source folder, right-click `setup.bat` and choose **Run as administrator**.
 
 ## The one change in the call app
 
-Set only the microphone to **CABLE Output (VB-Audio Virtual Cable)**. Leave the speaker on your headset.
-
-The first window can open Zoom, Google Meet, Slack, or WhatsApp for you. QUO uses the same microphone name. Press **I DID THAT** when the microphone is set. Later calls are just the headset and tok.si.
+The last step in the window tells you to set only the microphone to **CABLE Output (VB-Audio Virtual Cable)** and leave the speaker on your headset. It can open Zoom, Google Meet, Slack, or WhatsApp. QUO uses the same microphone name. Press **I DID THAT** when that is set. Later calls are just the headset and tok.si.
 
 ## The window
 
