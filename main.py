@@ -198,13 +198,34 @@ def check_for_update():
     return "updated"
 
 
-def restart_app():
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    executable = str(pythonw if pythonw.exists() else sys.executable)
-    args = [executable, str(ROOT / "main.py")]
+def launch_args():
+    exe = Path(sys.executable)
+    if exe.name.lower() == "tok.si.exe":
+        args = [str(exe)]
+    else:
+        pythonw = exe.with_name("pythonw.exe")
+        args = [str(pythonw if pythonw.exists() else exe), str(ROOT / "main.py")]
     if "--show" in sys.argv:
         args.append("--show")
-    subprocess.Popen(args, cwd=str(ROOT))
+    return args
+
+
+def is_admin():
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def relaunch_elevated():
+    import ctypes
+    params = subprocess.list2cmdline(sys.argv[1:])
+    return int(ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, str(ROOT), 1))
+
+
+def restart_app():
+    subprocess.Popen(launch_args(), cwd=str(ROOT))
     os._exit(0)
 
 
@@ -282,8 +303,7 @@ class ToksiApp(QMainWindow):
         self.apply_skin(self.state["skin"])
         self.refresh_buttons()
         self.push_line("TOK.SI READY")
-        self.worker = threading.Thread(target=self.engine_loop, daemon=True)
-        self.worker.start()
+        self.mic_flag = threading.Event()
         self.accept_thread = threading.Thread(target=self.accept_loop, daemon=True)
         self.accept_thread.start()
         self.ui_timer = QTimer(self)
@@ -293,7 +313,7 @@ class ToksiApp(QMainWindow):
         self.device_timer.timeout.connect(self.ensure_stream)
         self.device_timer.start(3000)
         QTimer.singleShot(400, self.ensure_stream)
-        QTimer.singleShot(700, self.maybe_show_mic_steps)
+        threading.Thread(target=self.prepare_then_run, daemon=True).start()
         if self.state.get("beta"):
             threading.Thread(target=self.arm_beta, daemon=True).start()
         threading.Thread(target=self.watch_for_update, daemon=True).start()
@@ -534,6 +554,35 @@ class ToksiApp(QMainWindow):
         except OSError as exc:
             log(f"could not open {url}: {exc}")
             self.push_line("OPEN THAT APP YOURSELF")
+
+    def prepare_then_run(self):
+        try:
+            import fetch_assets
+            if self.manifest is None:
+                self.status_queue.put("GETTING THE VOICES")
+            fetch_assets.ensure_voices()
+            if not fetch_assets.cable_present():
+                if not is_admin():
+                    self.status_queue.put("APPROVE THE CABLE INSTALLER")
+                    try:
+                        self.server.close()
+                    except Exception:
+                        pass
+                    if relaunch_elevated() > 32:
+                        time.sleep(0.4)
+                        os._exit(0)
+                    self.status_queue.put("CABLE NEEDS APPROVAL")
+                else:
+                    self.status_queue.put("INSTALLING THE CABLE")
+                    fetch_assets.ensure_cable()
+            fetch_assets.ensure_shortcuts()
+            self.manifest = self.read_manifest()
+            if not self.state.get("mic_ready") and fetch_assets.cable_present():
+                self.mic_flag.set()
+        except Exception as exc:
+            log(f"setup failed: {exc}")
+            self.status_queue.put("SETUP DID NOT FINISH")
+        self.engine_loop()
 
     def maybe_show_mic_steps(self):
         if self.state.get("mic_ready"):
@@ -875,9 +924,24 @@ class ToksiApp(QMainWindow):
                 self.refresh_buttons()
             elif text == "BETA ON":
                 self.refresh_buttons()
-            if text not in ("UPDATE SKIPPED", "UPDATE APPLIED", "BETA UNAVAILABLE", "BETA ON", "BETA OFF", "BETA CHECKING"):
+            if text not in (
+                "UPDATE SKIPPED",
+                "UPDATE APPLIED",
+                "BETA UNAVAILABLE",
+                "BETA ON",
+                "BETA OFF",
+                "BETA CHECKING",
+                "GETTING THE VOICES",
+                "APPROVE THE CABLE INSTALLER",
+                "CABLE NEEDS APPROVAL",
+                "INSTALLING THE CABLE",
+                "SETUP DID NOT FINISH",
+            ):
                 self.last_line = text
                 self.last_line_at = time.time()
+        if self.mic_flag.is_set():
+            self.mic_flag.clear()
+            self.maybe_show_mic_steps()
         if self.show_flag.is_set():
             self.show_flag.clear()
             self.showNormal()

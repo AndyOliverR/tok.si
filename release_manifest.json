@@ -1,9 +1,9 @@
 {
   "files": {
-    "README.md": "f7f872763639fbcc2b35fb638337467f836949624a093d01db0d988424abdbbc",
+    "README.md": "e275212f027103deea00598e41b40f75289eef6ead2b070f124d862d0a12d581",
     "beta_worker.py": "66065baca6f0b3c92757ef11552ddb44c0db768c13beb44344bdef541dd58e35",
-    "fetch_assets.py": "24e3c54aecbbe4179f3f943c0f83e18534438c30bc189d8ed1be4e9c9af5068d",
-    "main.py": "0238f4a4bd1e494bde320185e0bcee652d20e9c6d279403bd56b4873db152424",
+    "fetch_assets.py": "8dacf3ed685bf4a7d24fef2ba95dace62d30a99f7f9d4310e0ed8cc648b02696",
+    "main.py": "f3b7f591b97b183908c95a8ffd165fb5ffd926b39fd3d5368d9765bfb7cf0e16",
     "setup.bat": "a34619cde45b15d0cac34df64330008c0a6b022c469677d8da85adf453b852a1",
     "start.bat": "669c18c6785faefbff75730a8352a9585ba0f8b19a587b0cb1933d5d7bea87d1"
   }

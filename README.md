@@ -6,9 +6,13 @@ There is a short wait. tok.si sends the line when you pause, or after about a se
 
 ## Install
 
-Download the repository as a ZIP from GitHub, unzip it, then right-click `setup.bat` and choose **Run as administrator**. The first window tells you the one change in the call app.
+Download the Windows app from the latest release:
 
-To make a double-click app on this PC, run `build_exe.bat`. It writes `dist\tok.si\tok.si.exe` beside the source. That folder is not part of the download.
+https://github.com/AndyOliverR/tok.si/releases/latest
+
+Unzip it, open the `tok.si` folder, and double-click `tok.si.exe`. The first time, it gets the voices and Windows asks you to approve the virtual cable. The same window then tells you the one microphone change.
+
+If you are running the source folder, right-click `setup.bat` and choose **Run as administrator**. `build_exe.bat` rebuilds that app folder on this PC.
 
 ## The one change in the call app
 

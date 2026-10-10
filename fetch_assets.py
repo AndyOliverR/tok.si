@@ -153,7 +153,7 @@ def ensure_cable():
     subprocess.call([str(exe)])
     if not cable_present():
         raise RuntimeError(
-            "The virtual cable is not available yet. If you approved the installer, restart the PC and run setup.bat again."
+            "The virtual cable is not available yet. If you approved the installer, restart the PC and open tok.si again."
         )
     say("Virtual cable is ready.")
 
@@ -175,14 +175,21 @@ def write_shortcut(path, target, arguments):
 
 
 def ensure_shortcuts():
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    if not pythonw.exists():
-        pythonw = Path(sys.executable)
-    main_py = ROOT / "main.py"
+    exe = Path(sys.executable)
+    if exe.name.lower() == "tok.si.exe":
+        target = exe
+        show_args = "--show"
+        start_args = ""
+    else:
+        target = exe.with_name("pythonw.exe")
+        if not target.exists():
+            target = exe
+        show_args = f'"{ROOT / "main.py"}" --show'
+        start_args = f'"{ROOT / "main.py"}"'
     appdata = Path(os.environ["APPDATA"])
     programs = appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-    write_shortcut(programs / "tok.si.lnk", pythonw, f'"{main_py}" --show')
-    write_shortcut(programs / "Startup" / "tok.si.lnk", pythonw, f'"{main_py}"')
+    write_shortcut(programs / "tok.si.lnk", target, show_args)
+    write_shortcut(programs / "Startup" / "tok.si.lnk", target, start_args)
     say("tok.si will start at login. Search tok.si in Windows to open the window.")
 
 
