@@ -6,9 +6,9 @@ There is a short wait. tok.si sends the line when you pause, or after about a se
 
 ## Install
 
-Download `tok.si.exe` from the GitHub release and open it. The first time, Windows asks for administrator approval so the virtual cable can be installed. The same window then tells you the one change in the call app.
+Download the repository as a ZIP from GitHub, unzip it, then right-click `setup.bat` and choose **Run as administrator**. The first window tells you the one change in the call app.
 
-If you are running the source folder instead, right-click `setup.bat` and choose **Run as administrator**.
+To make a double-click app on this PC, run `build_exe.bat`. It writes `dist\tok.si\tok.si.exe` beside the source. That folder is not part of the download.
 
 ## The one change in the call app
 
