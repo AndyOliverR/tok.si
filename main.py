@@ -6,97 +6,112 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPainter, QColor
 
 class EqualizerWidget(QWidget):
+    """Deep space hyper-reactive audio wave visualizer matrix."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(360, 40)
-        self.bars = [0] * 12
+        self.setFixedSize(360, 50)
+        self.bars = [4] * 16
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
         self.is_active = False
 
     def start(self):
         self.is_active = True
-        self.timer.start(80)
+        self.timer.start(60)
 
     def stop(self):
         self.is_active = False
         self.timer.stop()
-        self.bars = [0] * 12
+        self.bars = [4] * 16
         self.update()
 
     def update_animation(self):
         if self.is_active:
-            self.bars = [np.random.randint(5, 35) for _ in range(12)]
+            self.bars = [np.random.randint(4, 45) for _ in range(16)]
             self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        spacing = 6
-        bar_width = (self.width() - (spacing * 11)) // 12
+        
+        spacing = 5
+        bar_width = (self.width() - (spacing * 15)) // 16
+        
         for i, bar_height in enumerate(self.bars):
             x = i * (bar_width + spacing)
             y = (self.height() - bar_height) // 2
-            color = QColor("#10b981") if self.is_active else QColor("#4b5563")
+            
+            # Vivid emerald matrix coloring when active, deep cosmic charcoal when ready
+            color = QColor("#00ff66") if self.is_active else QColor("#2d3748")
             painter.setBrush(color)
             painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(x, y, bar_width, bar_height, 3, 3)
+            painter.drawRoundedRect(x, y, bar_width, bar_height, 2, 2)
 
 class ToksiApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("tok.si")
-        self.setFixedSize(400, 360)
+        self.setFixedSize(400, 380)
         self.is_active = False
         self.is_bypass = False
         self.stream = None
         self.selected_gender = "Male"
 
+        # Star Wars Raw Space Tech Stylesheet (Deep Charcoal, Matte Obsidian, Emerald Accents)
         self.setStyleSheet("""
-            QMainWindow { background-color: #111827; }
-            QLabel { color: #f3f4f6; font-family: 'Segoe UI', Arial, sans-serif; }
-            QPushButton { font-family: 'Segoe UI', Arial, sans-serif; border-radius: 8px; }
+            QMainWindow {
+                background-color: #0a0f1d;
+            }
+            QLabel {
+                color: #e2e8f0;
+                font-family: 'Consolas', 'Courier New', monospace;
+            }
+            QPushButton {
+                font-family: 'Consolas', 'Courier New', monospace;
+                border-radius: 4px;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+            }
         """)
 
         main_widget = QWidget()
         layout = QVBoxLayout(main_widget)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(25, 25, 25, 25)
+        layout.setSpacing(20)
 
+        # Header Grid Layout
         header_layout = QHBoxLayout()
-        self.brand_title = QLabel("tok.si")
-        self.brand_title.setStyleSheet("font-size: 22px; font-weight: 800; color: #10b981; letter-spacing: 0.5px;")
+        self.brand_title = QLabel("TOK.SI // LINK")
+        self.brand_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #00ff66; letter-spacing: 2px;")
         
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("SYSTEM IDLE")
         self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.status_label.setStyleSheet("font-size: 12px; color: #9ca3af; font-weight: 600; background-color: #1f2937; padding: 4px 10px; border-radius: 12px;")
+        self.status_label.setStyleSheet("font-size: 11px; color: #a0aec0; font-weight: bold; background-color: #1a202c; padding: 4px 12px; border: 1px solid #2d3748; border-radius: 2px;")
         
         header_layout.addWidget(self.brand_title)
         header_layout.addStretch()
         header_layout.addWidget(self.status_label)
         layout.addLayout(header_layout)
 
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setStyleSheet("background-color: #1f2937; max-height: 1px; border: none;")
-        layout.addWidget(divider)
-
-        self.headset_label = QLabel("Searching hardware links...")
+        # Tactical Terminal Status Frame (Hides messy hardware names)
+        self.headset_label = QLabel("▼ INPUT PIPELINE CONNECTED")
         self.headset_label.setAlignment(Qt.AlignCenter)
-        self.headset_label.setStyleSheet("color: #9ca3af; font-size: 12px; font-weight: 500; background-color: #1f2937; padding: 10px; border-radius: 6px;")
+        self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
         layout.addWidget(self.headset_label)
-        self.auto_detect_headset()
 
+        # Equalizer Wave Area
         self.equalizer = EqualizerWidget()
         layout.addWidget(self.equalizer, 0, Qt.AlignCenter)
+        # Voice Profile Matrix Selection
         gender_layout = QHBoxLayout()
-        self.male_btn = QPushButton("US Male Voice")
-        self.female_btn = QPushButton("US Female Voice")
+        self.male_btn = QPushButton("MALE VOICE")
+        self.female_btn = QPushButton("FEMALE VOICE")
         
         self.male_btn.setCheckable(True)
         self.male_btn.setChecked(True)
-        self.male_btn.setStyleSheet("background-color: #3b82f6; color: white; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
-        self.female_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
+        
+        self.male_btn.setStyleSheet("background-color: #1a365d; color: #00ff66; border: 1px solid #00ff66; padding: 12px; font-weight: bold; font-size: 11px;")
+        self.female_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
         
         self.male_btn.clicked.connect(lambda: self.set_gender("Male"))
         self.female_btn.clicked.connect(lambda: self.set_gender("Female"))
@@ -105,14 +120,16 @@ class ToksiApp(QMainWindow):
         gender_layout.addWidget(self.female_btn)
         layout.addLayout(gender_layout)
 
+        # Primary Switch Action Bar
         control_layout = QHBoxLayout()
+        control_layout.setSpacing(10)
         
-        self.toggle_btn = QPushButton("TURN ON TOK.SI")
-        self.toggle_btn.setStyleSheet("background-color: #10b981; color: white; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
+        self.toggle_btn = QPushButton("ENGAGE BRIDGE")
+        self.toggle_btn.setStyleSheet("background-color: #0d2e25; color: #00ff66; border: 1px solid #00ff66; padding: 16px; font-weight: bold; font-size: 12px;")
         self.toggle_btn.clicked.connect(self.toggle_conversion)
         
-        self.bypass_btn = QPushButton("BYPASS (NATURAL VOICE)")
-        self.bypass_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
+        self.bypass_btn = QPushButton("BYPASS TRACE")
+        self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #4a5568; border: 1px solid #2d3748; padding: 16px; font-weight: bold; font-size: 12px;")
         self.bypass_btn.clicked.connect(self.toggle_bypass)
         self.bypass_btn.setEnabled(False)
         
@@ -124,66 +141,67 @@ class ToksiApp(QMainWindow):
 
     def auto_detect_headset(self):
         try:
-            default_input = sd.query_devices(kind='input')
-            name = default_input['name']
-            short_name = (name[:32] + '...') if len(name) > 35 else name
-            self.headset_label.setText(f"🎧 Mic: {short_name}")
+            sd.query_devices(kind='input')
+            self.headset_label.setText("▼ INPUT PIPELINE CONNECTED")
+            self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
         except Exception:
-            self.headset_label.setText("⚠️ Plug in a headphone setup to stream")
+            self.headset_label.setText("⚠️ LINK DISCONNECTED // PLUG IN HEADSET")
+            self.headset_label.setStyleSheet("color: #e53e3e; font-size: 11px; font-weight: bold; background-color: #2d1a1a; border: 1px dashed #e53e3e; padding: 12px; border-radius: 2px;")
 
     def set_gender(self, gender):
         self.selected_gender = gender
         if gender == "Male":
             self.male_btn.setChecked(True)
             self.female_btn.setChecked(False)
-            self.male_btn.setStyleSheet("background-color: #3b82f6; color: white; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
-            self.female_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
+            self.male_btn.setStyleSheet("background-color: #1a365d; color: #00ff66; border: 1px solid #00ff66; padding: 12px; font-weight: bold; font-size: 11px;")
+            self.female_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
         else:
             self.male_btn.setChecked(False)
             self.female_btn.setChecked(True)
-            self.male_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
-            self.female_btn.setStyleSheet("background-color: #ec4899; color: white; padding: 12px; font-weight: 700; font-size: 13px; border: none;")
+            self.male_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
+            self.female_btn.setStyleSheet("background-color: #4a1231; color: #f472b6; border: 1px solid #f472b6; padding: 12px; font-weight: bold; font-size: 11px;")
+        
         if self.is_active and not self.is_bypass:
-            self.status_label.setText(f"US {gender} Live")
+            self.status_label.setText(f"FEED: US {gender.upper()}")
 
     def toggle_conversion(self):
         if not self.is_active:
             self.is_active = True
             self.is_bypass = False
             self.bypass_btn.setEnabled(True)
-            self.bypass_btn.setStyleSheet("background-color: #4b5563; color: white; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
-            self.toggle_btn.setText("TOK.SI IS LIVE")
-            self.toggle_btn.setStyleSheet("background-color: #ef4444; color: white; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
-            self.status_label.setText("Bridge Active")
-            self.status_label.setStyleSheet("font-size: 12px; color: #10b981; font-weight: 600; background-color: #064e3b; padding: 4px 10px; border-radius: 12px;")
+            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.toggle_btn.setText("DISENGAGE STREAM")
+            self.toggle_btn.setStyleSheet("background-color: #3b1414; color: #f56565; border: 1px solid #f56565; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.status_label.setText("STREAM LIVE")
+            self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
             self.equalizer.start()
             self.start_global_interception()
         else:
             self.is_active = False
             self.is_bypass = False
             self.bypass_btn.setEnabled(False)
-            self.bypass_btn.setText("BYPASS (NATURAL VOICE)")
-            self.bypass_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
-            self.toggle_btn.setText("TURN ON TOK.SI")
-            self.toggle_btn.setStyleSheet("background-color: #10b981; color: white; padding: 16px; font-weight: 800; font-size: 14px; border: none; margin-top: 5px;")
-            self.status_label.setText("Ready")
-            self.status_label.setStyleSheet("font-size: 12px; color: #9ca3af; font-weight: 600; background-color: #1f2937; padding: 4px 10px; border-radius: 12px;")
+            self.bypass_btn.setText("BYPASS TRACE")
+            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #4a5568; border: 1px solid #2d3748; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.toggle_btn.setText("ENGAGE BRIDGE")
+            self.toggle_btn.setStyleSheet("background-color: #0d2e25; color: #00ff66; border: 1px solid #00ff66; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.status_label.setText("SYSTEM IDLE")
+            self.status_label.setStyleSheet("font-size: 11px; color: #a0aec0; font-weight: bold; background-color: #1a202c; padding: 4px 12px; border: 1px solid #2d3748; border-radius: 2px;")
             self.equalizer.stop()
             self.stop_global_interception()
 
     def toggle_bypass(self):
         if not self.is_bypass:
             self.is_bypass = True
-            self.bypass_btn.setText("PASSTHROUGH ON")
-            self.bypass_btn.setStyleSheet("background-color: #eab308; color: black; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
-            self.status_label.setText("Natural Audio")
-            self.status_label.setStyleSheet("font-size: 12px; color: #eab308; font-weight: 600; background-color: #451a03; padding: 4px 10px; border-radius: 12px;")
+            self.bypass_btn.setText("RAW PASSTHROUGH")
+            self.bypass_btn.setStyleSheet("background-color: #422006; color: #ecc94b; border: 1px solid #ecc94b; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.status_label.setText("RAW PASS")
+            self.status_label.setStyleSheet("font-size: 11px; color: #ecc94b; font-weight: bold; background-color: #451a03; padding: 4px 12px; border: 1px solid #ecc94b; border-radius: 2px;")
         else:
             self.is_bypass = False
-            self.bypass_btn.setText("BYPASS (NATURAL VOICE)")
-            self.bypass_btn.setStyleSheet("background-color: #4b5563; color: white; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
-            self.status_label.setText("Bridge Active")
-            self.status_label.setStyleSheet("font-size: 12px; color: #10b981; font-weight: 600; background-color: #064e3b; padding: 4px 10px; border-radius: 12px;")
+            self.bypass_btn.setText("BYPASS TRACE")
+            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
+            self.status_label.setText("STREAM LIVE")
+            self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
 
     def start_global_interception(self):
         self.auto_detect_headset()
@@ -194,7 +212,6 @@ class ToksiApp(QMainWindow):
                 return
             
             raw_buffer = indata[:, 0]
-            
             if self.is_bypass:
                 outdata[:, 0] = raw_buffer
                 return
