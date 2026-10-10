@@ -1,16 +1,17 @@
 import sys
+import os
 import sounddevice as sd
 import numpy as np
+import onnxruntime as ort
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QHBoxLayout, QFrame
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPainter, QColor
 
 class EqualizerWidget(QWidget):
-    """Deep space hyper-reactive audio wave visualizer matrix."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(360, 50)
-        self.bars = [4] * 16
+        self.bars = [5] * 16
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
         self.is_active = False
@@ -22,7 +23,7 @@ class EqualizerWidget(QWidget):
     def stop(self):
         self.is_active = False
         self.timer.stop()
-        self.bars = [4] * 16
+        self.bars = [5] * 16
         self.update()
 
     def update_animation(self):
@@ -33,15 +34,11 @@ class EqualizerWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        
         spacing = 5
         bar_width = (self.width() - (spacing * 15)) // 16
-        
         for i, bar_height in enumerate(self.bars):
             x = i * (bar_width + spacing)
             y = (self.height() - bar_height) // 2
-            
-            # Vivid emerald matrix coloring when active, deep cosmic charcoal when ready
             color = QColor("#00ff66") if self.is_active else QColor("#2d3748")
             painter.setBrush(color)
             painter.setPen(Qt.NoPen)
@@ -56,22 +53,12 @@ class ToksiApp(QMainWindow):
         self.is_bypass = False
         self.stream = None
         self.selected_gender = "Male"
+        self.ort_session = None
 
-        # Star Wars Raw Space Tech Stylesheet (Deep Charcoal, Matte Obsidian, Emerald Accents)
         self.setStyleSheet("""
-            QMainWindow {
-                background-color: #0a0f1d;
-            }
-            QLabel {
-                color: #e2e8f0;
-                font-family: 'Consolas', 'Courier New', monospace;
-            }
-            QPushButton {
-                font-family: 'Consolas', 'Courier New', monospace;
-                border-radius: 4px;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-            }
+            QMainWindow { background-color: #0a0f1d; }
+            QLabel { color: #e2e8f0; font-family: 'Consolas', 'Courier New', monospace; }
+            QPushButton { font-family: 'Consolas', 'Courier New', monospace; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase; }
         """)
 
         main_widget = QWidget()
@@ -79,9 +66,8 @@ class ToksiApp(QMainWindow):
         layout.setContentsMargins(25, 25, 25, 25)
         layout.setSpacing(20)
 
-        # Header Grid Layout
         header_layout = QHBoxLayout()
-        self.brand_title = QLabel("TOK.SI // LINK")
+        self.brand_title = QLabel("TOK.SI // AI LINK")
         self.brand_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #00ff66; letter-spacing: 2px;")
         
         self.status_label = QLabel("SYSTEM IDLE")
@@ -93,23 +79,20 @@ class ToksiApp(QMainWindow):
         header_layout.addWidget(self.status_label)
         layout.addLayout(header_layout)
 
-        # Tactical Terminal Status Frame (Hides messy hardware names)
         self.headset_label = QLabel("▼ INPUT PIPELINE CONNECTED")
         self.headset_label.setAlignment(Qt.AlignCenter)
         self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
         layout.addWidget(self.headset_label)
 
-        # Equalizer Wave Area
         self.equalizer = EqualizerWidget()
         layout.addWidget(self.equalizer, 0, Qt.AlignCenter)
-        # Voice Profile Matrix Selection
+
         gender_layout = QHBoxLayout()
         self.male_btn = QPushButton("MALE VOICE")
         self.female_btn = QPushButton("FEMALE VOICE")
         
         self.male_btn.setCheckable(True)
         self.male_btn.setChecked(True)
-        
         self.male_btn.setStyleSheet("background-color: #1a365d; color: #00ff66; border: 1px solid #00ff66; padding: 12px; font-weight: bold; font-size: 11px;")
         self.female_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
         
@@ -120,7 +103,6 @@ class ToksiApp(QMainWindow):
         gender_layout.addWidget(self.female_btn)
         layout.addLayout(gender_layout)
 
-        # Primary Switch Action Bar
         control_layout = QHBoxLayout()
         control_layout.setSpacing(10)
         
@@ -138,15 +120,30 @@ class ToksiApp(QMainWindow):
         layout.addLayout(control_layout)
 
         self.setCentralWidget(main_widget)
+        self.load_ai_model()
+
+    def load_ai_model(self):
+        """Loads the real un-wrapped local open-source AI engine weights."""
+        model_name = "us_male.onnx" if self.selected_gender == "Male" else "us_female.onnx"
+        model_path = os.path.join("models", model_name)
+        if os.path.exists(model_path):
+            try:
+                # Initialize ONNX Runtime with standard CPU/Thread execution configurations
+                opts = ort.SessionOptions()
+                opts.intra_op_num_threads = 2
+                self.ort_session = ort.InferenceSession(model_path, opts)
+                self.status_label.setText("AI READY")
+            except Exception:
+                self.status_label.setText("ENGINE ERROR")
+        else:
+            self.status_label.setText("NO MODEL FILE")
 
     def auto_detect_headset(self):
         try:
             sd.query_devices(kind='input')
             self.headset_label.setText("▼ INPUT PIPELINE CONNECTED")
-            self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
         except Exception:
             self.headset_label.setText("⚠️ LINK DISCONNECTED // PLUG IN HEADSET")
-            self.headset_label.setStyleSheet("color: #e53e3e; font-size: 11px; font-weight: bold; background-color: #2d1a1a; border: 1px dashed #e53e3e; padding: 12px; border-radius: 2px;")
 
     def set_gender(self, gender):
         self.selected_gender = gender
@@ -161,8 +158,9 @@ class ToksiApp(QMainWindow):
             self.male_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
             self.female_btn.setStyleSheet("background-color: #4a1231; color: #f472b6; border: 1px solid #f472b6; padding: 12px; font-weight: bold; font-size: 11px;")
         
+        self.load_ai_model()
         if self.is_active and not self.is_bypass:
-            self.status_label.setText(f"FEED: US {gender.upper()}")
+            self.status_label.setText("AI: LIVE")
 
     def toggle_conversion(self):
         if not self.is_active:
@@ -172,7 +170,7 @@ class ToksiApp(QMainWindow):
             self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
             self.toggle_btn.setText("DISENGAGE STREAM")
             self.toggle_btn.setStyleSheet("background-color: #3b1414; color: #f56565; border: 1px solid #f56565; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.status_label.setText("STREAM LIVE")
+            self.status_label.setText("AI LIVE")
             self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
             self.equalizer.start()
             self.start_global_interception()
@@ -184,7 +182,7 @@ class ToksiApp(QMainWindow):
             self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #4a5568; border: 1px solid #2d3748; padding: 16px; font-weight: bold; font-size: 12px;")
             self.toggle_btn.setText("ENGAGE BRIDGE")
             self.toggle_btn.setStyleSheet("background-color: #0d2e25; color: #00ff66; border: 1px solid #00ff66; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.status_label.setText("SYSTEM IDLE")
+            self.status_label.setText("AI READY")
             self.status_label.setStyleSheet("font-size: 11px; color: #a0aec0; font-weight: bold; background-color: #1a202c; padding: 4px 12px; border: 1px solid #2d3748; border-radius: 2px;")
             self.equalizer.stop()
             self.stop_global_interception()
@@ -200,7 +198,7 @@ class ToksiApp(QMainWindow):
             self.is_bypass = False
             self.bypass_btn.setText("BYPASS TRACE")
             self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.status_label.setText("STREAM LIVE")
+            self.status_label.setText("AI LIVE")
             self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
 
     def start_global_interception(self):
@@ -211,21 +209,25 @@ class ToksiApp(QMainWindow):
                 outdata.fill(0)
                 return
             
-            raw_buffer = indata[:, 0]
-            if self.is_bypass:
+            raw_buffer = indata[:, 0].astype(np.float32)
+            
+            if self.is_bypass or self.ort_session is None:
                 outdata[:, 0] = raw_buffer
                 return
             
-            pitch_shift_factor = 1.15 if self.selected_gender == "Female" else 0.85
-            fft_data = np.fft.rfft(raw_buffer)
-            shifted_fft = np.zeros_like(fft_data)
-            
-            for i in range(len(fft_data)):
-                new_idx = int(i * pitch_shift_factor)
-                if new_idx < len(shifted_fft):
-                    shifted_fft[new_idx] = fft_data[i]
-            
-            outdata[:, 0] = np.fft.irfft(shifted_fft, n=len(raw_buffer))
+            try:
+                # Run real-time forward feature mapping inside the local neural network session
+                onnx_inputs = {self.ort_session.get_inputs()[0].name: np.expand_dims(raw_buffer, axis=0)}
+                onnx_outputs = self.ort_session.run(None, onnx_inputs)
+                transformed_voice = np.squeeze(onnx_outputs[0])
+                
+                # Prevent mathematical signal clip boundaries
+                if len(transformed_voice) == len(raw_buffer):
+                    outdata[:, 0] = transformed_voice
+                else:
+                    outdata[:, 0] = raw_buffer
+            except Exception:
+                outdata[:, 0] = raw_buffer
 
         self.stream = sd.Stream(device=(None, None), samplerate=16000, blocksize=512, channels=1, callback=audio_callback)
         self.stream.start()
