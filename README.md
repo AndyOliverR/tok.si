@@ -30,27 +30,16 @@ Unlike traditional platforms, \*\*tok.si\*\* integrates directly at the system a
 
 
 
-\## 🚀 One-Click Quick Start Guide
+## 🚀 One-Click Quick Start Guide
 
+### 1. Installation
+1. Download this project repository folder to your computer.
+2. Right-click `setup.bat` and choose **Run as administrator**. (This silently configures your system audio routing driver loopback automatically).
 
-
-\### 1. Requirements
-
-Before running the application, your system needs a way to pass audio through python blocks. 
-
-\* Download and install the free virtual engine \*\*\[VB-Audio Cable](https://vb-audio.com)\*\*. 
-
-
-
-\### 2. Running tok.si
-
-1\. Download this project repository folder to your computer.
-
-2\. Double-click the `start.bat` file inside the folder.
-
-3\. The standalone \*\*tok.si\*\* visual dashboard will open and sync to your headset.
-
-4\. Choose either \*\*Male Voice\*\* or \*\*Female Voice\*\*, click \*\*TURN ON TOK.SI\*\*, and begin your meeting cleanly!
+### 2. Running tok.si
+1. Open **QUO**, Zoom, Slack, or Google Meet. Go to their audio settings menu and set your **Microphone Input** to **Cable Output**.
+2. Double-click the `start.bat` file inside the folder to launch the premium dashboard interface.
+3. Choose either **US Male Voice** or **US Female Voice**, click **TURN ON TOK.SI**, and speak naturally! Click **BYPASS** at any time to instantly drop back to your raw natural voice.
 
 
 
