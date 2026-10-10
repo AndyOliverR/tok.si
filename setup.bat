@@ -14,8 +14,8 @@ if errorlevel 1 goto fail
 python -c "import sys" || goto fail
 
 echo Installing libraries...
-python -m pip install cffi sounddevice numpy PySide6 sherpa-onnx || goto fail
-python -c "import sherpa_onnx, sounddevice, numpy, PySide6" || goto fail
+python -m pip install cffi sounddevice numpy PySide6 sherpa-onnx cryptography || goto fail
+python -c "import sherpa_onnx, sounddevice, numpy, PySide6, cryptography" || goto fail
 
 echo Installing voices and the virtual cable...
 python fetch_assets.py

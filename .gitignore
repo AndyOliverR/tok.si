@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 toksi.log
 toksi_state.json
+toksi_improve.jsonl
+release_ed25519.key

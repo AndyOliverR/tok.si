@@ -2,7 +2,7 @@
 
 tok.si listens to your headset, Bluetooth mic, or built-in mic and speaks your words in an American English voice on the call.
 
-There is a short beat, about half a second, between when you speak and when the other person hears you. Your original tone is not kept. The other person hears a clear US male or US female voice.
+There is a short beat, about half a second, between when you speak and when the other person hears you. Your original tone is not kept. The other person hears a clear US male or US female voice. The sound is processed on your PC.
 
 ## Install
 
@@ -33,6 +33,11 @@ Search Windows for **tok.si** and open it.
 - **BYPASS** sends your own mic through instantly.
 - **SKIN** switches the Silver, Classic, and Lime looks.
 - **SHARE** copies [https://github.com/AndyOliverR/tok.si](https://github.com/AndyOliverR/tok.si) so you can paste it into a chat.
+- **IMPROVE** is off until you turn it on. When it is on, a line you reject with **BYPASS** is saved in a file on this PC only. tok.si does not upload your microphone audio or those notes.
+
+## Updates
+
+When the PC is online at startup, tok.si checks the official repository for a signed update. The update is applied only when the signature matches the key shipped with your copy. If the check fails, the copy you already installed keeps running and the window says **UPDATE SKIPPED**.
 
 ## License
 

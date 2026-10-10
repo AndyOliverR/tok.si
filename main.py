@@ -1,11 +1,15 @@
+import hashlib
 import json
 import os
 import queue
 import socket
+import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from pathlib import Path
+from urllib.error import URLError
 
 import numpy as np
 import sounddevice as sd
@@ -28,6 +32,10 @@ STATE_PATH = ROOT / "toksi_state.json"
 LOG_PATH = ROOT / "toksi.log"
 MANIFEST_PATH = ROOT / "models" / "manifest.json"
 SHARE_URL = "https://github.com/AndyOliverR/tok.si"
+RAW_ROOT = "https://raw.githubusercontent.com/AndyOliverR/tok.si/main/"
+UPDATE_FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md")
+PUBLIC_KEY_PATH = ROOT / "toksi_update_key.pub"
+IMPROVE_PATH = ROOT / "toksi_improve.jsonl"
 PORT = 47651
 STREAM_RATE = 22050
 BLOCK = 1024
@@ -100,7 +108,7 @@ def log(message):
 
 
 def load_state():
-    base = {"accent_on": True, "gender": "Male", "skin": "Classic"}
+    base = {"accent_on": True, "gender": "Male", "skin": "Classic", "improve": False}
     try:
         saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         base.update(saved)
@@ -110,6 +118,7 @@ def load_state():
         base["skin"] = "Classic"
     if base["gender"] not in ("Male", "Female"):
         base["gender"] = "Male"
+    base["improve"] = bool(base.get("improve"))
     return base
 
 
@@ -118,6 +127,73 @@ def save_state(state):
         STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
     except OSError as exc:
         log(f"state save failed: {exc}")
+
+
+def fetch_bytes(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "tok.si"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read()
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def check_for_update():
+    try:
+        manifest_bytes = fetch_bytes(RAW_ROOT + "release_manifest.json")
+        signature = bytes.fromhex(fetch_bytes(RAW_ROOT + "release_manifest.sig").decode().strip())
+        public_key = bytes.fromhex(PUBLIC_KEY_PATH.read_text(encoding="utf-8").strip())
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, manifest_bytes)
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        files = manifest["files"]
+    except URLError:
+        return "offline"
+    except Exception as exc:
+        log(f"update rejected: {exc}")
+        return "skip"
+    pending = {}
+    for name in UPDATE_FILES:
+        expected = files.get(name)
+        local = ROOT / name
+        if not expected or not local.exists() or file_sha256(local) != expected:
+            if not expected:
+                return "skip"
+            pending[name] = expected
+    if not pending:
+        return "current"
+    staged = {}
+    try:
+        for name, expected in pending.items():
+            payload = fetch_bytes(RAW_ROOT + name)
+            if hashlib.sha256(payload).hexdigest() != expected:
+                return "skip"
+            staged[name] = payload
+    except URLError:
+        return "offline"
+    except Exception as exc:
+        log(f"update download rejected: {exc}")
+        return "skip"
+    for name, payload in staged.items():
+        target = ROOT / name
+        temporary = target.with_suffix(target.suffix + ".new")
+        temporary.write_bytes(payload)
+        os.replace(temporary, target)
+    return "updated"
+
+
+def restart_app():
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    executable = str(pythonw if pythonw.exists() else sys.executable)
+    args = [executable, str(ROOT / "main.py")]
+    if "--show" in sys.argv:
+        args.append("--show")
+    subprocess.Popen(args, cwd=str(ROOT))
+    os._exit(0)
 
 
 def claim_instance(show):
@@ -182,6 +258,8 @@ class ToksiApp(QMainWindow):
         self.show_flag = threading.Event()
         self.engine_ready = threading.Event()
         self.manifest = self.read_manifest()
+        self.last_line = ""
+        self.last_line_at = 0.0
         self.device_key = None
         self.started = time.time()
         self.setWindowTitle("tok.si")
@@ -201,6 +279,7 @@ class ToksiApp(QMainWindow):
         self.device_timer.timeout.connect(self.ensure_stream)
         self.device_timer.start(3000)
         QTimer.singleShot(400, self.ensure_stream)
+        threading.Thread(target=self.watch_for_update, daemon=True).start()
 
     def build_ui(self):
         shell = QWidget()
@@ -251,7 +330,9 @@ class ToksiApp(QMainWindow):
         self.bypass_btn = QPushButton("BYPASS")
         self.skin_btn = QPushButton("SKIN")
         self.share_btn = QPushButton("SHARE")
+        self.improve_btn = QPushButton("IMPROVE")
         self.bypass_btn.setCheckable(True)
+        self.improve_btn.setCheckable(True)
         for button, handler in (
             (self.male_btn, lambda: self.set_gender("Male")),
             (self.female_btn, lambda: self.set_gender("Female")),
@@ -259,6 +340,7 @@ class ToksiApp(QMainWindow):
             (self.bypass_btn, self.toggle_bypass),
             (self.skin_btn, self.cycle_skin),
             (self.share_btn, self.share_link),
+            (self.improve_btn, self.toggle_improve),
         ):
             button.clicked.connect(handler)
             controls.addWidget(button)
@@ -331,6 +413,8 @@ class ToksiApp(QMainWindow):
             self.bridge_btn.setText("BRIDGE OFF")
             self.mode_label.setText("YOUR MIC")
         self.bypass_btn.setText("BYPASS ON" if self.bypass_on else "BYPASS")
+        self.improve_btn.setChecked(bool(self.state.get("improve")))
+        self.improve_btn.setText("IMPROVE ON" if self.state.get("improve") else "IMPROVE")
 
     def set_gender(self, gender):
         self.state["gender"] = gender
@@ -350,7 +434,37 @@ class ToksiApp(QMainWindow):
         self.bypass_on = self.bypass_btn.isChecked()
         self.clear_playback()
         self.refresh_buttons()
+        if self.bypass_on:
+            self.note_local_miss()
         self.push_line("RAW MIC" if self.bypass_on else "ACCENT PATH")
+
+    def toggle_improve(self):
+        self.state["improve"] = self.improve_btn.isChecked()
+        save_state(self.state)
+        self.refresh_buttons()
+        self.push_line("LOCAL NOTES ON" if self.state["improve"] else "LOCAL NOTES OFF")
+
+    def note_local_miss(self):
+        if not self.state.get("improve") or not self.last_line:
+            return
+        if time.time() - self.last_line_at > 20:
+            return
+        record = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "line": self.last_line}
+        try:
+            with open(IMPROVE_PATH, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record) + "\n")
+            self.push_line("NOTED ON THIS PC")
+        except OSError as exc:
+            log(f"improve note failed: {exc}")
+
+    def watch_for_update(self):
+        result = check_for_update()
+        if result == "skip":
+            self.status_queue.put("UPDATE SKIPPED")
+        elif result == "updated":
+            self.status_queue.put("UPDATE APPLIED")
+            time.sleep(1)
+            restart_app()
 
     def cycle_skin(self):
         names = list(SKINS)
@@ -623,9 +737,13 @@ class ToksiApp(QMainWindow):
         self.clock.setText(f"{elapsed // 60:02d}:{elapsed % 60:02d}")
         while True:
             try:
-                self.push_line(self.status_queue.get_nowait())
+                text = self.status_queue.get_nowait()
             except queue.Empty:
                 break
+            self.push_line(text)
+            if text not in ("UPDATE SKIPPED", "UPDATE APPLIED"):
+                self.last_line = text
+                self.last_line_at = time.time()
         if self.show_flag.is_set():
             self.show_flag.clear()
             self.showNormal()
