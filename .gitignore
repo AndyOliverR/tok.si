@@ -1,0 +1,6 @@
+models/
+vbcable.zip/
+__pycache__/
+*.pyc
+toksi.log
+toksi_state.json

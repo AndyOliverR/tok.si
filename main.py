@@ -1,251 +1,655 @@
-import sys
+import json
 import os
-import sounddevice as sd
+import queue
+import socket
+import sys
+import threading
+import time
+from pathlib import Path
+
 import numpy as np
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QHBoxLayout, QFrame
+import sounddevice as sd
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+ROOT = Path(__file__).resolve().parent
+STATE_PATH = ROOT / "toksi_state.json"
+LOG_PATH = ROOT / "toksi.log"
+MANIFEST_PATH = ROOT / "models" / "manifest.json"
+SHARE_URL = "https://github.com/AndyOliverR/tok.si"
+PORT = 47651
+STREAM_RATE = 22050
+BLOCK = 1024
+SILENCE_SECONDS = 0.2
+SPEECH_SECONDS = 0.6
+LEVEL_GATE = 0.015
+HEADSET_WORDS = ("HEADSET", "HEADPHONE", "AIRPOD", "BLUETOOTH", "BUDS", "EARBUD", "HANDS-FREE")
+SKIP_TEXT = {
+    "thanks for watching",
+    "thank you for watching",
+    "thanks for watching.",
+    "subscribe",
+    "you",
+    "...",
+    ".",
+}
+
+SKINS = {
+    "Silver": {
+        "window": "#d5d8df",
+        "panel": "#eef1f6",
+        "panel_edge": "#9aa3b2",
+        "lcd": "#16365c",
+        "lcd_text": "#9fd0ff",
+        "ink": "#1a2333",
+        "muted": "#5c6778",
+        "accent": "#3a7bd5",
+        "list": "#e7eaf0",
+        "bar": "#5b8fd6",
+        "button": "#f7f8fb",
+        "button_ink": "#1a2333",
+    },
+    "Classic": {
+        "window": "#1a1028",
+        "panel": "#241832",
+        "panel_edge": "#5a3d78",
+        "lcd": "#07140d",
+        "lcd_text": "#39ff14",
+        "ink": "#d7ffe0",
+        "muted": "#8fbf7a",
+        "accent": "#e6c200",
+        "list": "#0c1020",
+        "bar": "#f0d040",
+        "button": "#2a1c3d",
+        "button_ink": "#f3ffe8",
+    },
+    "Lime": {
+        "window": "#2a2d31",
+        "panel": "#1c1f23",
+        "panel_edge": "#4d5648",
+        "lcd": "#10240a",
+        "lcd_text": "#b6ff3a",
+        "ink": "#e7ffc4",
+        "muted": "#8ea878",
+        "accent": "#b6ff3a",
+        "list": "#141618",
+        "bar": "#c6ff3a",
+        "button": "#2c3136",
+        "button_ink": "#e7ffc4",
+    },
+}
+
+
+def log(message):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as handle:
+            handle.write(time.strftime("%H:%M:%S ") + message + "\n")
+    except OSError:
+        pass
+
+
+def load_state():
+    base = {"accent_on": True, "gender": "Male", "skin": "Classic"}
+    try:
+        saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        base.update(saved)
+    except Exception:
+        pass
+    if base["skin"] not in SKINS:
+        base["skin"] = "Classic"
+    if base["gender"] not in ("Male", "Female"):
+        base["gender"] = "Male"
+    return base
+
+
+def save_state(state):
+    try:
+        STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except OSError as exc:
+        log(f"state save failed: {exc}")
+
+
+def claim_instance(show):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server.bind(("127.0.0.1", PORT))
+    except OSError:
+        try:
+            client = socket.create_connection(("127.0.0.1", PORT), timeout=1)
+            client.sendall(b"SHOW")
+            client.close()
+        except OSError:
+            pass
+        sys.exit(0)
+    server.listen(1)
+    server.settimeout(0.5)
+    return server
+
 
 class EqualizerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(360, 50)
-        self.bars = [0] * 16
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_animation)
-        self.is_active = False
+        self.setFixedHeight(110)
+        self.levels = [0.08] * 12
+        self.color = QColor("#f0d040")
 
-    def start(self):
-        self.is_active = True
-        self.timer.start(60)
-
-    def stop(self):
-        self.is_active = False
-        self.timer.stop()
-        self.bars = [0] * 16
+    def set_levels(self, levels, color):
+        self.levels = levels
+        self.color = QColor(color)
         self.update()
-
-    def update_animation(self):
-        if self.is_active:
-            self.bars = [np.random.randint(4, 45) for _ in range(16)]
-            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        spacing = 5
-        bar_width = (self.width() - (spacing * 15)) // 16
-        for i, bar_height in enumerate(self.bars):
-            x = i * (bar_width + spacing)
-            y = (self.height() - bar_height) // 2
-            color = QColor("#00ff66") if self.is_active else QColor("#2d3748")
-            painter.setBrush(color)
-            painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(x, y, bar_width, bar_height, 2, 2)
+        painter.setPen(Qt.NoPen)
+        count = len(self.levels)
+        spacing = 6
+        bar_width = max(6, (self.width() - spacing * (count + 1)) // count)
+        for index, level in enumerate(self.levels):
+            height = max(6, int(self.height() * min(1.0, level)))
+            x = spacing + index * (bar_width + spacing)
+            y = self.height() - height - 6
+            painter.setBrush(self.color)
+            painter.drawRoundedRect(x, y, bar_width, height, 2, 2)
+
 
 class ToksiApp(QMainWindow):
-    def __init__(self):
+    def __init__(self, server):
         super().__init__()
-        self.setWindowTitle("tok.si")
-        self.setFixedSize(400, 380)
-        self.is_active = False
-        self.is_bypass = False
+        self.server = server
+        self.state = load_state()
         self.stream = None
-        self.selected_gender = "Male"
-        self.ort_session = None
+        self.input_queue = queue.Queue(maxsize=100)
+        self.status_queue = queue.Queue()
+        self.bypass_on = False
+        self.link_down = False
+        self.play_lock = threading.Lock()
+        self.play_buf = np.zeros(0, dtype=np.float32)
+        self.level_snapshot = [0.08] * 12
+        self.stop_event = threading.Event()
+        self.show_flag = threading.Event()
+        self.engine_ready = threading.Event()
+        self.manifest = self.read_manifest()
+        self.device_key = None
+        self.started = time.time()
+        self.setWindowTitle("tok.si")
+        self.setFixedSize(460, 640)
+        self.build_ui()
+        self.apply_skin(self.state["skin"])
+        self.refresh_buttons()
+        self.push_line("TOK.SI READY")
+        self.worker = threading.Thread(target=self.engine_loop, daemon=True)
+        self.worker.start()
+        self.accept_thread = threading.Thread(target=self.accept_loop, daemon=True)
+        self.accept_thread.start()
+        self.ui_timer = QTimer(self)
+        self.ui_timer.timeout.connect(self.on_tick)
+        self.ui_timer.start(200)
+        self.device_timer = QTimer(self)
+        self.device_timer.timeout.connect(self.ensure_stream)
+        self.device_timer.start(3000)
+        QTimer.singleShot(400, self.ensure_stream)
 
-        self.setStyleSheet("""
-            QMainWindow { background-color: #0a0f1d; }
-            QLabel { color: #e2e8f0; font-family: 'Consolas', 'Courier New', monospace; }
-            QPushButton { font-family: 'Consolas', 'Courier New', monospace; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase; }
-        """)
+    def build_ui(self):
+        shell = QWidget()
+        layout = QVBoxLayout(shell)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
-        main_widget = QWidget()
-        layout = QVBoxLayout(main_widget)
-        layout.setContentsMargins(25, 25, 25, 25)
-        layout.setSpacing(20)
+        self.deck = QFrame()
+        self.deck.setObjectName("deck")
+        deck_layout = QVBoxLayout(self.deck)
+        title_row = QHBoxLayout()
+        self.brand = QLabel("TOK.SI")
+        self.brand.setObjectName("brand")
+        self.clock = QLabel("00:00")
+        self.clock.setObjectName("clock")
+        self.clock.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        title_row.addWidget(self.brand)
+        title_row.addStretch()
+        title_row.addWidget(self.clock)
+        deck_layout.addLayout(title_row)
+        self.mode_label = QLabel("STARTING")
+        self.mode_label.setObjectName("mode")
+        self.mode_label.setAlignment(Qt.AlignCenter)
+        deck_layout.addWidget(self.mode_label)
+        layout.addWidget(self.deck)
 
-        header_layout = QHBoxLayout()
-        self.brand_title = QLabel("TOK.SI // AI LINK")
-        self.brand_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #00ff66; letter-spacing: 2px;")
-        
-        self.status_label = QLabel("AI READY")
-        self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
-        
-        header_layout.addWidget(self.brand_title)
-        header_layout.addStretch()
-        header_layout.addWidget(self.status_label)
-        layout.addLayout(header_layout)
-
-        self.headset_label = QLabel("▼ INPUT PIPELINE CONNECTED")
-        self.headset_label.setAlignment(Qt.AlignCenter)
-        self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
-        layout.addWidget(self.headset_label)
-
+        self.eq_frame = QFrame()
+        self.eq_frame.setObjectName("panel")
+        eq_layout = QVBoxLayout(self.eq_frame)
         self.equalizer = EqualizerWidget()
-        layout.addWidget(self.equalizer, 0, Qt.AlignCenter)
+        eq_layout.addWidget(self.equalizer)
+        layout.addWidget(self.eq_frame)
 
-        gender_layout = QHBoxLayout()
-        self.male_btn = QPushButton("MALE VOICE")
-        self.female_btn = QPushButton("FEMALE VOICE")
-        
+        self.list_frame = QFrame()
+        self.list_frame.setObjectName("panel")
+        list_layout = QVBoxLayout(self.list_frame)
+        self.lines = QListWidget()
+        self.lines.setObjectName("lines")
+        list_layout.addWidget(self.lines)
+        layout.addWidget(self.list_frame, 1)
+
+        controls = QHBoxLayout()
+        self.male_btn = QPushButton("MALE")
+        self.female_btn = QPushButton("FEMALE")
         self.male_btn.setCheckable(True)
-        self.male_btn.setChecked(True)
-        self.male_btn.setStyleSheet("background-color: #1a365d; color: #00ff66; border: 1px solid #00ff66; padding: 12px; font-weight: bold; font-size: 11px;")
-        self.female_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
-        
-        self.male_btn.clicked.connect(lambda: self.set_gender("Male"))
-        self.female_btn.clicked.connect(lambda: self.set_gender("Female"))
-        
-        gender_layout.addWidget(self.male_btn)
-        gender_layout.addWidget(self.female_btn)
-        layout.addLayout(gender_layout)
+        self.female_btn.setCheckable(True)
+        self.bridge_btn = QPushButton("BRIDGE")
+        self.bypass_btn = QPushButton("BYPASS")
+        self.skin_btn = QPushButton("SKIN")
+        self.share_btn = QPushButton("SHARE")
+        self.bypass_btn.setCheckable(True)
+        for button, handler in (
+            (self.male_btn, lambda: self.set_gender("Male")),
+            (self.female_btn, lambda: self.set_gender("Female")),
+            (self.bridge_btn, self.toggle_accent),
+            (self.bypass_btn, self.toggle_bypass),
+            (self.skin_btn, self.cycle_skin),
+            (self.share_btn, self.share_link),
+        ):
+            button.clicked.connect(handler)
+            controls.addWidget(button)
+        layout.addLayout(controls)
+        self.setCentralWidget(shell)
 
-        control_layout = QHBoxLayout()
-        control_layout.setSpacing(10)
-        
-        self.toggle_btn = QPushButton("ENGAGE BRIDGE")
-        self.toggle_btn.setStyleSheet("background-color: #0d2e25; color: #00ff66; border: 1px solid #00ff66; padding: 16px; font-weight: bold; font-size: 12px;")
-        self.toggle_btn.clicked.connect(self.toggle_conversion)
-        
-        self.bypass_btn = QPushButton("BYPASS TRACE")
-        self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #4a5568; border: 1px solid #2d3748; padding: 16px; font-weight: bold; font-size: 12px;")
-        self.bypass_btn.clicked.connect(self.toggle_bypass)
-        self.bypass_btn.setEnabled(False)
-        
-        control_layout.addWidget(self.toggle_btn, 2)
-        control_layout.addWidget(self.bypass_btn, 1)
-        layout.addLayout(control_layout)
+    def apply_skin(self, name):
+        skin = SKINS[name]
+        self.state["skin"] = name
+        save_state(self.state)
+        self.setStyleSheet(
+            f"""
+            QMainWindow {{ background-color: {skin['window']}; }}
+            QFrame#deck, QFrame#panel {{
+                background-color: {skin['panel']};
+                border: 2px solid {skin['panel_edge']};
+                border-radius: 6px;
+            }}
+            QLabel {{ color: {skin['ink']}; font-family: Tahoma, Consolas, sans-serif; }}
+            QLabel#brand {{ font-size: 22px; font-weight: bold; letter-spacing: 3px; }}
+            QLabel#clock, QLabel#mode {{
+                background-color: {skin['lcd']};
+                color: {skin['lcd_text']};
+                font-family: Consolas, monospace;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 4px;
+            }}
+            QListWidget#lines {{
+                background-color: {skin['list']};
+                color: {skin['lcd_text']};
+                font-family: Consolas, monospace;
+                font-size: 12px;
+                border: none;
+            }}
+            QPushButton {{
+                background-color: {skin['button']};
+                color: {skin['button_ink']};
+                border: 1px solid {skin['panel_edge']};
+                border-radius: 4px;
+                padding: 8px 4px;
+                font-family: Tahoma, sans-serif;
+                font-weight: bold;
+                font-size: 11px;
+            }}
+            QPushButton:checked {{
+                background-color: {skin['accent']};
+                color: #111111;
+            }}
+            """
+        )
+        self.equalizer.color = QColor(skin["bar"])
+        self.equalizer.update()
 
-        self.setCentralWidget(main_widget)
-        self.load_ai_model()
-    def load_ai_model(self):
-        import importlib.util
-        model_name = "us_male.onnx" if self.selected_gender == "Male" else "us_female.onnx"
-        model_path = os.path.join("models", model_name)
-        
-        if os.path.exists(model_path) and os.path.getsize(model_path) > 500000 and importlib.util.find_spec("onnxruntime"):
-            try:
-                import onnxruntime as ort
-                opts = ort.SessionOptions()
-                opts.intra_op_num_threads = 2
-                self.ort_session = ort.InferenceSession(model_path, opts)
-                self.status_label.setText("AI READY")
-                self.status_label.setStyleSheet("font-size: 11px; color: #00ff66; font-weight: bold; background-color: #064e3b; padding: 4px 12px; border: 1px solid #00ff66; border-radius: 2px;")
-            except Exception:
-                self.ort_session = None
-                self.set_dsp_fallback_status()
+    def push_line(self, text):
+        stamp = time.strftime("%H:%M:%S")
+        self.lines.insertItem(0, f"{stamp}  {text}")
+        while self.lines.count() > 12:
+            self.lines.takeItem(self.lines.count() - 1)
+
+    def refresh_buttons(self):
+        male = self.state["gender"] == "Male"
+        self.male_btn.setChecked(male)
+        self.female_btn.setChecked(not male)
+        if self.state["accent_on"]:
+            self.bridge_btn.setText("BRIDGE ON")
+            self.mode_label.setText("ACCENT ON")
         else:
-            self.ort_session = None
-            self.set_dsp_fallback_status()
-
-    def set_dsp_fallback_status(self):
-        self.status_label.setText("DSP READY")
-        self.status_label.setStyleSheet("font-size: 11px; color: #38bdf8; font-weight: bold; background-color: #0c4a6e; padding: 4px 12px; border: 1px solid #38bdf8; border-radius: 2px;")
-
-    def auto_detect_headset(self):
-        try:
-            sd.query_devices(kind='input')
-            self.headset_label.setText("▼ INPUT PIPELINE CONNECTED")
-            self.headset_label.setStyleSheet("color: #00ff66; font-size: 11px; font-weight: bold; background-color: #0d1527; border: 1px dashed #00ff66; padding: 12px; border-radius: 2px;")
-        except Exception:
-            self.headset_label.setText("⚠️ LINK DISCONNECTED // PLUG IN HEADSET")
-            self.headset_label.setStyleSheet("color: #e53e3e; font-size: 11px; font-weight: bold; background-color: #2d1a1a; border: 1px dashed #e53e3e; padding: 12px; border-radius: 2px;")
+            self.bridge_btn.setText("BRIDGE OFF")
+            self.mode_label.setText("YOUR MIC")
+        self.bypass_btn.setText("BYPASS ON" if self.bypass_on else "BYPASS")
 
     def set_gender(self, gender):
-        self.selected_gender = gender
-        if gender == "Male":
-            self.male_btn.setChecked(True)
-            self.female_btn.setChecked(False)
-            self.male_btn.setStyleSheet("background-color: #1a365d; color: #00ff66; border: 1px solid #00ff66; padding: 12px; font-weight: bold; font-size: 11px;")
-            self.female_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
-        else:
-            self.male_btn.setChecked(False)
-            self.female_btn.setChecked(True)
-            self.male_btn.setStyleSheet("background-color: #1a202c; color: #718096; border: 1px solid #2d3748; padding: 12px; font-weight: bold; font-size: 11px;")
-            self.female_btn.setStyleSheet("background-color: #4a1231; color: #f472b6; border: 1px solid #f472b6; padding: 12px; font-weight: bold; font-size: 11px;")
-        
-        self.load_ai_model()
+        self.state["gender"] = gender
+        save_state(self.state)
+        self.refresh_buttons()
+        self.clear_playback()
+        self.push_line(gender.upper() + " VOICE")
 
-    def toggle_conversion(self):
-        if not self.is_active:
-            self.is_active = True
-            self.is_bypass = False
-            self.bypass_btn.setEnabled(True)
-            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.toggle_btn.setText("DISENGAGE STREAM")
-            self.toggle_btn.setStyleSheet("background-color: #3b1414; color: #f56565; border: 1px solid #f56565; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.equalizer.start()
-            self.start_global_interception()
-        else:
-            self.is_active = False
-            self.is_bypass = False
-            self.bypass_btn.setEnabled(False)
-            self.bypass_btn.setText("BYPASS TRACE")
-            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #4a5568; border: 1px solid #2d3748; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.toggle_btn.setText("ENGAGE BRIDGE")
-            self.toggle_btn.setStyleSheet("background-color: #0d2e25; color: #00ff66; border: 1px solid #00ff66; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.equalizer.stop()
-            self.load_ai_model()
-            self.stop_global_interception()
+    def toggle_accent(self):
+        self.state["accent_on"] = not self.state["accent_on"]
+        save_state(self.state)
+        self.clear_playback()
+        self.refresh_buttons()
+        self.push_line("ACCENT ON" if self.state["accent_on"] else "ACCENT OFF")
 
     def toggle_bypass(self):
-        if not self.is_bypass:
-            self.is_bypass = True
-            self.bypass_btn.setText("RAW PASSTHROUGH")
-            self.bypass_btn.setStyleSheet("background-color: #422006; color: #ecc94b; border: 1px solid #ecc94b; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.status_label.setText("RAW PASS")
-            self.status_label.setStyleSheet("font-size: 11px; color: #ecc94b; font-weight: bold; background-color: #451a03; padding: 4px 12px; border: 1px solid #ecc94b; border-radius: 2px;")
-        else:
-            self.is_bypass = False
-            self.bypass_btn.setText("BYPASS TRACE")
-            self.bypass_btn.setStyleSheet("background-color: #1a202c; color: #e2e8f0; border: 1px solid #4a5568; padding: 16px; font-weight: bold; font-size: 12px;")
-            self.load_ai_model()
+        self.bypass_on = self.bypass_btn.isChecked()
+        self.clear_playback()
+        self.refresh_buttons()
+        self.push_line("RAW MIC" if self.bypass_on else "ACCENT PATH")
 
-    def start_global_interception(self):
-        self.auto_detect_headset()
-        
-        def audio_callback(indata, outdata, frames, time, status):
-            if not self.is_active:
+    def cycle_skin(self):
+        names = list(SKINS)
+        nxt = names[(names.index(self.state["skin"]) + 1) % len(names)]
+        self.apply_skin(nxt)
+        self.push_line(nxt.upper() + " SKIN")
+
+    def share_link(self):
+        QApplication.clipboard().setText(SHARE_URL)
+        self.push_line("LINK COPIED. PASTE IT TO SHARE.")
+        self.mode_label.setText("LINK COPIED")
+
+    def clear_playback(self):
+        with self.play_lock:
+            self.play_buf = np.zeros(0, dtype=np.float32)
+
+    def enqueue_audio(self, samples):
+        samples = np.asarray(samples, dtype=np.float32).reshape(-1)
+        samples = np.clip(samples, -1.0, 1.0)
+        with self.play_lock:
+            self.play_buf = np.concatenate([self.play_buf, samples])
+            limit = STREAM_RATE * 3
+            if len(self.play_buf) > limit:
+                self.play_buf = self.play_buf[-limit:]
+
+    def pull_audio(self, count):
+        with self.play_lock:
+            if len(self.play_buf) >= count:
+                out = self.play_buf[:count].copy()
+                self.play_buf = self.play_buf[count:]
+                return out
+            out = np.zeros(count, dtype=np.float32)
+            have = len(self.play_buf)
+            if have:
+                out[:have] = self.play_buf
+                self.play_buf = np.zeros(0, dtype=np.float32)
+            return out
+
+    def read_manifest(self):
+        try:
+            data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        if not all(os.path.exists(path) for path in data.values()):
+            return None
+        return data
+
+    def resolve_devices(self):
+        try:
+            devices = sd.query_devices()
+            hostapis = sd.query_hostapis()
+        except Exception as exc:
+            log(f"device query failed: {exc}")
+            return None, None
+        wasapi = None
+        for index, host in enumerate(hostapis):
+            if "WASAPI" in str(host["name"]).upper():
+                wasapi = index
+                break
+        mic = None
+        headset = None
+        cable = None
+        for index, dev in enumerate(devices):
+            name = str(dev["name"]).upper()
+            if wasapi is not None and dev["hostapi"] != wasapi:
+                continue
+            if dev["max_input_channels"] > 0 and "CABLE" not in name:
+                if any(word in name for word in HEADSET_WORDS):
+                    headset = headset if headset is not None else index
+                mic = mic if mic is not None else index
+            if dev["max_output_channels"] > 0 and "CABLE INPUT" in name and cable is None:
+                cable = index
+        if wasapi is not None and cable is None:
+            for index, dev in enumerate(devices):
+                name = str(dev["name"]).upper()
+                if dev["max_output_channels"] > 0 and "CABLE INPUT" in name:
+                    cable = index
+                    break
+        chosen = headset if headset is not None else mic
+        return chosen, cable
+
+    def ensure_stream(self):
+        mic, cable = self.resolve_devices()
+        if mic is None or cable is None:
+            if not self.link_down:
+                self.push_line("LINK DISCONNECTED")
+                self.mode_label.setText("NO CABLE")
+                self.link_down = True
+            self.stop_stream()
+            self.device_key = None
+            return
+        self.link_down = False
+        key = (mic, cable)
+        if self.stream is not None and self.device_key == key:
+            return
+        self.stop_stream()
+        self.device_key = key
+
+        def audio_callback(indata, outdata, frames, time_info, status):
+            try:
+                raw = np.asarray(indata[:, 0], dtype=np.float32)
+                if (not self.state["accent_on"]) or self.bypass_on or not self.engine_ready.is_set():
+                    outdata[:, 0] = raw
+                else:
+                    try:
+                        self.input_queue.put_nowait(raw.copy())
+                    except queue.Full:
+                        pass
+                    outdata[:, 0] = self.pull_audio(len(raw))
+                block = np.abs(outdata[:, 0])
+                if len(block):
+                    edges = np.array_split(block, 12)
+                    self.level_snapshot = [float(min(1.0, np.max(part) * 3)) if len(part) else 0.08 for part in edges]
+            except Exception:
                 outdata.fill(0)
-                return
-            
-            raw_buffer = indata[:, 0].astype(np.float32)
-            if self.is_bypass:
-                outdata[:, 0] = raw_buffer
-                return
-            
-            if self.ort_session is not None:
-                try:
-                    onnx_inputs = {self.ort_session.get_inputs()[0].name: np.expand_dims(raw_buffer, axis=0)}
-                    onnx_outputs = self.ort_session.run(None, onnx_inputs)
-                    transformed_voice = np.squeeze(onnx_outputs)
-                    if len(transformed_voice) == len(raw_buffer):
-                        outdata[:, 0] = transformed_voice
-                        return
-                except Exception:
-                    pass
-            
-            pitch_shift_factor = 1.18 if self.selected_gender == "Female" else 0.82
-            fft_data = np.fft.rfft(raw_buffer)
-            shifted_fft = np.zeros_like(fft_data)
-            for i in range(len(fft_data)):
-                new_idx = int(i * pitch_shift_factor)
-                if new_idx < len(shifted_fft):
-                    shifted_fft[new_idx] = fft_data[i]
-            outdata[:, 0] = np.fft.irfft(shifted_fft, n=len(raw_buffer))
 
-        self.stream = sd.Stream(device=(None, None), samplerate=16000, blocksize=512, channels=1, callback=audio_callback)
-        self.stream.start()
+        try:
+            self.stream = sd.Stream(
+                device=(mic, cable),
+                samplerate=STREAM_RATE,
+                blocksize=BLOCK,
+                channels=1,
+                dtype="float32",
+                callback=audio_callback,
+            )
+            self.stream.start()
+            self.push_line("MIC LIVE")
+            if self.state["accent_on"] and self.engine_ready.is_set():
+                self.mode_label.setText("ACCENT ON")
+        except Exception as exc:
+            log(f"stream start failed: {exc}")
+            self.stream = None
+            self.device_key = None
+            self.push_line("MIC FAILED")
 
-    def stop_global_interception(self):
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
+    def stop_stream(self):
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception as exc:
+                log(f"stream stop failed: {exc}")
+            self.stream = None
+
+    def engine_loop(self):
+        recognizer = None
+        voices = {}
+        if self.manifest:
+            try:
+                import sherpa_onnx
+                recognizer = sherpa_onnx.OfflineRecognizer.from_whisper(
+                    encoder=self.manifest["whisper_encoder"],
+                    decoder=self.manifest["whisper_decoder"],
+                    tokens=self.manifest["whisper_tokens"],
+                    language="en",
+                    task="transcribe",
+                    num_threads=2,
+                )
+                self.engine_ready.set()
+                log("whisper ready")
+            except Exception as exc:
+                log(f"whisper load failed: {exc}")
+                recognizer = None
+        pending = []
+        voiced = 0
+        silent = 0
+        in_speech = False
+        silence_need = int(SILENCE_SECONDS * STREAM_RATE)
+        speech_need = int(SPEECH_SECONDS * STREAM_RATE)
+        while not self.stop_event.is_set():
+            try:
+                piece = self.input_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if recognizer is None or not self.state["accent_on"] or self.bypass_on:
+                pending = []
+                in_speech = False
+                voiced = 0
+                silent = 0
+                continue
+            pending.append(piece)
+            level = float(np.sqrt(np.mean(np.square(piece)))) if len(piece) else 0.0
+            if level >= LEVEL_GATE:
+                in_speech = True
+                voiced += len(piece)
+                silent = 0
+            elif in_speech:
+                silent += len(piece)
+            else:
+                total = sum(len(part) for part in pending)
+                if total > STREAM_RATE:
+                    pending = pending[-1:]
+                continue
+            if voiced < speech_need and silent < silence_need:
+                continue
+            audio = np.concatenate(pending)
+            pending = []
+            in_speech = False
+            voiced = 0
+            silent = 0
+            if len(audio) < int(0.25 * STREAM_RATE):
+                continue
+            try:
+                text = self.transcribe(recognizer, audio)
+                if not text or text.lower().strip(" .") in SKIP_TEXT:
+                    continue
+                samples, rate = self.speak(voices, text)
+                if rate != STREAM_RATE and len(samples):
+                    samples = self.resample(samples, rate, STREAM_RATE)
+                if len(samples):
+                    self.enqueue_audio(samples)
+                    self.status_queue.put(text[:80])
+            except Exception as exc:
+                log(f"voice step failed: {exc}")
+
+    def transcribe(self, recognizer, audio):
+        stream = recognizer.create_stream()
+        stream.accept_waveform(STREAM_RATE, np.asarray(audio, dtype=np.float32))
+        recognizer.decode_stream(stream)
+        return stream.result.text.strip()
+
+    def speak(self, voices, text):
+        import sherpa_onnx
+        gender = self.state["gender"]
+        key = "male" if gender == "Male" else "female"
+        if key not in voices:
+            config = sherpa_onnx.OfflineTtsConfig(
+                model=sherpa_onnx.OfflineTtsModelConfig(
+                    vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                        model=self.manifest[f"{key}_model"],
+                        tokens=self.manifest[f"{key}_tokens"],
+                        data_dir=self.manifest[f"{key}_data"],
+                    ),
+                    num_threads=2,
+                    provider="cpu",
+                ),
+                max_num_sentences=1,
+            )
+            if not config.validate():
+                raise RuntimeError("voice file is not valid")
+            voices[key] = sherpa_onnx.OfflineTts(config)
+        audio = voices[key].generate(text, sid=0, speed=1.05)
+        return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
+
+    def resample(self, audio, src, dst):
+        count = int(len(audio) * dst / src)
+        if count < 1:
+            return np.zeros(0, dtype=np.float32)
+        old = np.linspace(0.0, 1.0, len(audio), endpoint=False)
+        new = np.linspace(0.0, 1.0, count, endpoint=False)
+        return np.interp(new, old, audio).astype(np.float32)
+
+    def accept_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                conn, _addr = self.server.accept()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+            try:
+                data = conn.recv(32)
+                if b"SHOW" in data:
+                    self.show_flag.set()
+            finally:
+                conn.close()
+
+    def on_tick(self):
+        elapsed = int(time.time() - self.started)
+        self.clock.setText(f"{elapsed // 60:02d}:{elapsed % 60:02d}")
+        while True:
+            try:
+                self.push_line(self.status_queue.get_nowait())
+            except queue.Empty:
+                break
+        if self.show_flag.is_set():
+            self.show_flag.clear()
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+        skin = SKINS[self.state["skin"]]
+        self.equalizer.set_levels(self.level_snapshot, skin["bar"])
+
+    def closeEvent(self, event):
+        event.ignore()
+        self.hide()
+
+
+def main():
+    show = "--show" in sys.argv
+    server = claim_instance(show)
+    app = QApplication(sys.argv)
+    app.setApplicationName("tok.si")
+    app.setQuitOnLastWindowClosed(False)
+    window = ToksiApp(server)
+    if show:
+        window.show()
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ToksiApp()
-    window.show()
-    sys.exit(app.exec())
+    main()
