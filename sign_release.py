@@ -10,7 +10,7 @@ KEY_PATH = Path.home() / ".toksi" / "release_ed25519.key"
 PUBLIC_PATH = ROOT / "toksi_update_key.pub"
 MANIFEST_PATH = ROOT / "release_manifest.json"
 SIGNATURE_PATH = ROOT / "release_manifest.sig"
-FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md")
+FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md", "beta_worker.py")
 
 
 def file_sha256(path):

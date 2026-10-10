@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -33,14 +34,16 @@ LOG_PATH = ROOT / "toksi.log"
 MANIFEST_PATH = ROOT / "models" / "manifest.json"
 SHARE_URL = "https://github.com/AndyOliverR/tok.si"
 RAW_ROOT = "https://raw.githubusercontent.com/AndyOliverR/tok.si/main/"
-UPDATE_FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md")
+UPDATE_FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md", "beta_worker.py")
 PUBLIC_KEY_PATH = ROOT / "toksi_update_key.pub"
 IMPROVE_PATH = ROOT / "toksi_improve.jsonl"
 PORT = 47651
 STREAM_RATE = 48000
 BLOCK = 1024
 SILENCE_SECONDS = 0.2
-SPEECH_SECONDS = 0.6
+SPEECH_SECONDS = 1.0
+BETA_ROOT = Path.home() / ".toksi" / "seed-vc"
+BETA_PYTHON = BETA_ROOT / ".venv" / "Scripts" / "python.exe"
 LEVEL_GATE = 0.015
 HEADSET_WORDS = ("HEADSET", "HEADPHONE", "AIRPOD", "BLUETOOTH", "BUDS", "EARBUD", "HANDS-FREE")
 SKIP_TEXT = {
@@ -108,7 +111,14 @@ def log(message):
 
 
 def load_state():
-    base = {"accent_on": True, "gender": "Male", "skin": "Classic", "improve": False}
+    base = {
+        "accent_on": True,
+        "gender": "Male",
+        "skin": "Classic",
+        "improve": False,
+        "beta": False,
+        "mic_ready": False,
+    }
     try:
         saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         base.update(saved)
@@ -119,6 +129,8 @@ def load_state():
     if base["gender"] not in ("Male", "Female"):
         base["gender"] = "Male"
     base["improve"] = bool(base.get("improve"))
+    base["beta"] = bool(base.get("beta"))
+    base["mic_ready"] = bool(base.get("mic_ready"))
     return base
 
 
@@ -262,6 +274,8 @@ class ToksiApp(QMainWindow):
         self.last_line_at = 0.0
         self.device_key = None
         self.started = time.time()
+        self.beta_live = False
+        self.beta_proc = None
         self.setWindowTitle("tok.si")
         self.setFixedSize(460, 640)
         self.build_ui()
@@ -279,6 +293,9 @@ class ToksiApp(QMainWindow):
         self.device_timer.timeout.connect(self.ensure_stream)
         self.device_timer.start(3000)
         QTimer.singleShot(400, self.ensure_stream)
+        QTimer.singleShot(700, self.maybe_show_mic_steps)
+        if self.state.get("beta"):
+            threading.Thread(target=self.arm_beta, daemon=True).start()
         threading.Thread(target=self.watch_for_update, daemon=True).start()
 
     def build_ui(self):
@@ -331,8 +348,10 @@ class ToksiApp(QMainWindow):
         self.skin_btn = QPushButton("SKIN")
         self.share_btn = QPushButton("SHARE")
         self.improve_btn = QPushButton("IMPROVE")
+        self.beta_btn = QPushButton("BETA")
         self.bypass_btn.setCheckable(True)
         self.improve_btn.setCheckable(True)
+        self.beta_btn.setCheckable(True)
         for button, handler in (
             (self.male_btn, lambda: self.set_gender("Male")),
             (self.female_btn, lambda: self.set_gender("Female")),
@@ -341,6 +360,7 @@ class ToksiApp(QMainWindow):
             (self.skin_btn, self.cycle_skin),
             (self.share_btn, self.share_link),
             (self.improve_btn, self.toggle_improve),
+            (self.beta_btn, self.toggle_beta),
         ):
             button.clicked.connect(handler)
             controls.addWidget(button)
@@ -415,6 +435,8 @@ class ToksiApp(QMainWindow):
         self.bypass_btn.setText("BYPASS ON" if self.bypass_on else "BYPASS")
         self.improve_btn.setChecked(bool(self.state.get("improve")))
         self.improve_btn.setText("IMPROVE ON" if self.state.get("improve") else "IMPROVE")
+        self.beta_btn.setChecked(bool(self.beta_live))
+        self.beta_btn.setText("BETA ON" if self.beta_live else "BETA")
 
     def set_gender(self, gender):
         self.state["gender"] = gender
@@ -443,6 +465,111 @@ class ToksiApp(QMainWindow):
         save_state(self.state)
         self.refresh_buttons()
         self.push_line("LOCAL NOTES ON" if self.state["improve"] else "LOCAL NOTES OFF")
+
+    def toggle_beta(self):
+        if not self.beta_btn.isChecked():
+            self.stop_beta()
+            self.state["beta"] = False
+            save_state(self.state)
+            self.refresh_buttons()
+            self.push_line("BETA OFF")
+            return
+        self.push_line("BETA CHECKING")
+        threading.Thread(target=self.arm_beta, daemon=True).start()
+
+    def stop_beta(self):
+        self.beta_live = False
+        proc = self.beta_proc
+        self.beta_proc = None
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+
+    def arm_beta(self):
+        self.stop_beta()
+        if not BETA_PYTHON.exists() or not (BETA_ROOT / "real-time-gui.py").exists():
+            self.status_queue.put("BETA UNAVAILABLE")
+            return
+        try:
+            probe = subprocess.run(
+                [str(BETA_PYTHON), str(ROOT / "beta_worker.py"), "--probe"],
+                cwd=str(BETA_ROOT),
+                capture_output=True,
+                timeout=40,
+                text=True,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log(f"beta probe failed: {exc}")
+            self.status_queue.put("BETA UNAVAILABLE")
+            return
+        if probe.returncode != 0:
+            log(probe.stderr[-400:] if probe.stderr else "beta probe declined")
+            self.status_queue.put("BETA UNAVAILABLE")
+            return
+        try:
+            timed = subprocess.run(
+                [str(BETA_PYTHON), str(ROOT / "beta_worker.py"), "--time-chunk"],
+                cwd=str(BETA_ROOT),
+                capture_output=True,
+                timeout=180,
+                text=True,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log(f"beta timing failed: {exc}")
+            self.status_queue.put("BETA UNAVAILABLE")
+            return
+        line = (timed.stdout or "").strip().splitlines()
+        pace = line[-1] if line else ""
+        if timed.returncode != 0 or not pace.startswith("FAST"):
+            log(pace or (timed.stderr or "")[-400:])
+            self.status_queue.put("BETA UNAVAILABLE")
+            return
+        self.beta_live = True
+        self.state["beta"] = True
+        save_state(self.state)
+        self.status_queue.put("BETA ON")
+
+    def open_call_app(self, url):
+        try:
+            os.startfile(url)
+        except OSError as exc:
+            log(f"could not open {url}: {exc}")
+            self.push_line("OPEN THAT APP YOURSELF")
+
+    def maybe_show_mic_steps(self):
+        if self.state.get("mic_ready"):
+            return
+        self.show()
+        self.raise_()
+        box = QDialog(self)
+        box.setWindowTitle("tok.si")
+        layout = QVBoxLayout(box)
+        words = QLabel(
+            "Put on your headset.\n\n"
+            "Open your call app and set only the microphone to\n"
+            "CABLE Output (VB-Audio Virtual Cable).\n\n"
+            "Leave the speaker on your headset.\n"
+            "Then come back and press I DID THAT."
+        )
+        words.setWordWrap(True)
+        layout.addWidget(words)
+        apps = QHBoxLayout()
+        for label, target in (
+            ("Zoom", "zoommtg://"),
+            ("Meet", "https://meet.google.com"),
+            ("Slack", "slack://"),
+            ("WhatsApp", "whatsapp://"),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, url=target: self.open_call_app(url))
+            apps.addWidget(button)
+        layout.addLayout(apps)
+        done = QPushButton("I DID THAT")
+        done.clicked.connect(box.accept)
+        layout.addWidget(done)
+        if box.exec() == QDialog.Accepted:
+            self.state["mic_ready"] = True
+            save_state(self.state)
+            self.push_line("HEADSET READY. TALK WHEN THE CALL STARTS.")
 
     def note_local_miss(self):
         if not self.state.get("improve") or not self.last_line:
@@ -706,7 +833,7 @@ class ToksiApp(QMainWindow):
             if not config.validate():
                 raise RuntimeError("voice file is not valid")
             voices[key] = sherpa_onnx.OfflineTts(config)
-        audio = voices[key].generate(text, sid=0, speed=1.05)
+        audio = voices[key].generate(text, sid=0, speed=1.0)
         return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
 
     def resample(self, audio, src, dst):
@@ -741,7 +868,14 @@ class ToksiApp(QMainWindow):
             except queue.Empty:
                 break
             self.push_line(text)
-            if text not in ("UPDATE SKIPPED", "UPDATE APPLIED"):
+            if text == "BETA UNAVAILABLE":
+                self.beta_live = False
+                self.state["beta"] = False
+                save_state(self.state)
+                self.refresh_buttons()
+            elif text == "BETA ON":
+                self.refresh_buttons()
+            if text not in ("UPDATE SKIPPED", "UPDATE APPLIED", "BETA UNAVAILABLE", "BETA ON", "BETA OFF", "BETA CHECKING"):
                 self.last_line = text
                 self.last_line_at = time.time()
         if self.show_flag.is_set():
@@ -764,7 +898,7 @@ def main():
     app.setApplicationName("tok.si")
     app.setQuitOnLastWindowClosed(False)
     window = ToksiApp(server)
-    if show:
+    if show or not window.state.get("mic_ready"):
         window.show()
     sys.exit(app.exec())
 

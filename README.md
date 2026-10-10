@@ -1,39 +1,34 @@
 # tok.si
 
-tok.si listens to your headset, Bluetooth mic, or built-in mic and speaks your words in an American English voice on the call.
+Put on your headset and talk. The person on the call hears an American English voice. You hear them in your headset as usual.
 
-There is a short beat, about half a second, between when you speak and when the other person hears you. Your original tone is not kept. The other person hears a clear US male or US female voice. The sound is processed on your PC.
+There is a short wait. tok.si sends the line when you pause, or after about a second if you keep going. Your own voice is not kept. **BYPASS** sends your microphone through with no wait.
 
 ## Install
 
-1. Open [https://github.com/AndyOliverR/tok.si](https://github.com/AndyOliverR/tok.si), download the ZIP, and unzip it.
-2. Right-click `setup.bat` and choose **Run as administrator**.
-3. Wait until it says **SETUP COMPLETE**. That installs Python if it is missing, the voice files, and the virtual cable, and it turns tok.si on at every login.
+Download `tok.si.exe` from the GitHub release and open it. The first time, Windows asks for administrator approval so the virtual cable can be installed. The same window then tells you the one change in the call app.
 
-If setup stops, read the message on screen and run `setup.bat` again.
+If you are running the source folder instead, right-click `setup.bat` and choose **Run as administrator**.
 
-## One change in the call app
+## The one change in the call app
 
-Change only the **microphone** to **CABLE Output (VB-Audio Virtual Cable)**. Leave the speaker on your normal headphones.
+Set only the microphone to **CABLE Output (VB-Audio Virtual Cable)**. Leave the speaker on your headset.
 
-- QUO Phone: the microphone setting
-- Zoom: Settings, Audio, Microphone
-- Slack: Preferences, Audio and video, Microphone
-- Google Meet: the microphone menu in the call
-- WhatsApp Desktop: Settings, Audio, Microphone
+The first window can open Zoom, Google Meet, Slack, or WhatsApp for you. QUO uses the same microphone name. Press **I DID THAT** when the microphone is set. Later calls are just the headset and tok.si.
 
-Then talk. Windows sound settings stay as they are.
+## The window
 
-## Turn it off, or share it
-
-Search Windows for **tok.si** and open it.
+Search Windows for **tok.si**.
 
 - **BRIDGE** turns the American voice off or on. Closing the window does not turn it off.
 - **MALE** and **FEMALE** choose the voice.
 - **BYPASS** sends your own mic through instantly.
 - **SKIN** switches the Silver, Classic, and Lime looks.
-- **SHARE** copies [https://github.com/AndyOliverR/tok.si](https://github.com/AndyOliverR/tok.si) so you can paste it into a chat.
-- **IMPROVE** is off until you turn it on. When it is on, a line you reject with **BYPASS** is saved in a file on this PC only. tok.si does not upload your microphone audio or those notes.
+- **SHARE** copies https://github.com/AndyOliverR/tok.si
+- **IMPROVE** is off until you turn it on. A line you reject with **BYPASS** is saved on this PC only. Nothing is uploaded.
+- **BETA** is off until you turn it on. It tries a live voice converter on this PC. If that converter cannot keep up, the window says **BETA UNAVAILABLE** and the American reader keeps the call.
+
+This is for a normal call. It can still miss a word.
 
 ## Updates
 
