@@ -1,16 +1,8 @@
-# tok.si 🇮🇳 ➔ 🇺🇸
+# tok.si // DEEP SPACE ACCENT BRIDGE 🇮🇳 ➔ 🇺🇸
 
 **tok.si** is a free, open-source, real-time native system accent bridge designed to seamlessly convert Indian English pronunciations into a standard USA American accent during live calls. 
 
-Unlike traditional platforms, **tok.si** integrates directly at the system audio driver layer, meaning it automatically intercepts your connected headphone microphone and pushes the converted stream globally. **No setting modifications are needed inside Zoom, Google Meet, WhatsApp, or Microsoft Teams.**
-
----
-
-## ✨ Features
-* **Zero Configuration:** Automatically locks onto your default active headset.
-* **Premium Matte UI:** Modern dark mode interface featuring an interactive live audio visualizer.
-* **Dual Profiles:** Toggle smoothly between native **US Male Voice** and **US Female Voice** algorithms.
-* **100% Free & Open Source:** Run entirely locally on your own computer with zero subscription limitations or account registrations.
+The software automatically intercepts your connected headphone microphone and routes it system-wide. **Windows System Sound settings are adjusted completely automatically upon installation.**
 
 ---
 
@@ -18,9 +10,21 @@ Unlike traditional platforms, **tok.si** integrates directly at the system audio
 
 ### 1. Installation
 1. Download this project repository folder to your computer.
-2. Right-click `setup.bat` and choose **Run as administrator**. (This silently configures your free system audio routing driver loopback automatically).
+2. Right-click `setup.bat` and choose **Run as administrator**. 
+   *(This silently installs the virtual routing driver and automatically configures your Windows sound settings under the hood).*
 
-### 2. Running tok.si
-1. Open **QUO**, Zoom, Slack, or Google Meet. Go to their audio settings menu and set your **Microphone Input** to **Cable Output**.
-2. Double-click the `start.bat` file inside the folder to launch the premium dashboard interface.
-3. Choose either **US Male Voice** or **US Female Voice**, click **TURN ON TOK.SI**, and speak naturally! Click **BYPASS** at any time to instantly drop back to your raw natural voice.
+### 2. The Final App Step
+Open the app you use to make calls (**QUO Phone**, **Slack**, **Zoom**, or **Google Meet**) and make this single adjustments inside its audio settings menu:
+
+*   **Microphone / Input Device:** Change this to **CABLE Output (VB-Audio Virtual Cable)**.
+*   **Speaker / Output Device:** Leave this set to your **Regular Headphones** so you can hear others normally.
+
+### 3. Launching
+1. Double-click `start.bat` to launch the tactical space console.
+2. Select your target profile (**MALE VOICE** or **FEMALE VOICE**).
+3. Click **ENGAGE BRIDGE** and speak naturally. Tap **BYPASS TRACE** at any moment to instantly drop back to your raw natural voice.
+
+---
+
+## 📄 License
+Distributed under the open-source MIT License. Completely free for startups and developers.
