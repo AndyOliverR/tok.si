@@ -3,7 +3,7 @@ echo ===================================================
 echo             tok.si | Free Auto-Installer
 echo ===================================================
 
-:: 1. Verify Core Python Environment Components
+:: 1. Verify Core Python Environment Components and Audio Wrappers
 echo Verifying system framework configurations...
 pip install --upgrade pip
 pip install cffi sounddevice numpy PySide6
@@ -18,11 +18,7 @@ powershell -Command "Expand-Archive -Path 'vbcable.zip' -DestinationPath 'vbcabl
 
 :: 4. Silently install the device driver into the Windows system layer
 echo Injecting native system audio bridge (requires admin window confirmation)...
-if exist "%SystemRoot%\System32\choice.exe" (
-    start /wait vbcable_extracted\VBCABLE_Setup_x64.exe /i
-) else (
-    start vbcable_extracted\VBCABLE_Setup_x64.exe
-)
+start /wait vbcable_extracted\VBCABLE_Setup_x64.exe /i
 
 :: 5. Clean up the installer junk files to keep it raw and clean
 echo Cleaning temporary data...
