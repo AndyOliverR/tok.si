@@ -9,7 +9,7 @@ class EqualizerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(360, 40)
-        self.bars = [5] * 12
+        self.bars = [0] * 12
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
         self.is_active = False
@@ -21,7 +21,7 @@ class EqualizerWidget(QWidget):
     def stop(self):
         self.is_active = False
         self.timer.stop()
-        self.bars = [5] * 12
+        self.bars = [0] * 12
         self.update()
 
     def update_animation(self):
@@ -48,7 +48,7 @@ class ToksiApp(QMainWindow):
         self.setWindowTitle("tok.si")
         self.setFixedSize(400, 360)
         self.is_active = False
-        self.is_bypass = False  # Track if user wants their natural native voice passed through
+        self.is_bypass = False
         self.stream = None
         self.selected_gender = "Male"
 
@@ -63,7 +63,6 @@ class ToksiApp(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        # Header Section
         header_layout = QHBoxLayout()
         self.brand_title = QLabel("tok.si")
         self.brand_title.setStyleSheet("font-size: 22px; font-weight: 800; color: #10b981; letter-spacing: 0.5px;")
@@ -82,7 +81,6 @@ class ToksiApp(QMainWindow):
         divider.setStyleSheet("background-color: #1f2937; max-height: 1px; border: none;")
         layout.addWidget(divider)
 
-        # Active Hardware Status Monitor
         self.headset_label = QLabel("Searching hardware links...")
         self.headset_label.setAlignment(Qt.AlignCenter)
         self.headset_label.setStyleSheet("color: #9ca3af; font-size: 12px; font-weight: 500; background-color: #1f2937; padding: 10px; border-radius: 6px;")
@@ -91,8 +89,6 @@ class ToksiApp(QMainWindow):
 
         self.equalizer = EqualizerWidget()
         layout.addWidget(self.equalizer, 0, Qt.AlignCenter)
-
-        # Voice Profile Switch Matrices
         gender_layout = QHBoxLayout()
         self.male_btn = QPushButton("US Male Voice")
         self.female_btn = QPushButton("US Female Voice")
@@ -109,7 +105,6 @@ class ToksiApp(QMainWindow):
         gender_layout.addWidget(self.female_btn)
         layout.addLayout(gender_layout)
 
-        # Main Controls Footer (Master Switch & Emergency Bypass)
         control_layout = QHBoxLayout()
         
         self.toggle_btn = QPushButton("TURN ON TOK.SI")
@@ -119,7 +114,7 @@ class ToksiApp(QMainWindow):
         self.bypass_btn = QPushButton("BYPASS (NATURAL VOICE)")
         self.bypass_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
         self.bypass_btn.clicked.connect(self.toggle_bypass)
-        self.bypass_btn.setEnabled(False) # Only active if tok.si stream is active
+        self.bypass_btn.setEnabled(False)
         
         control_layout.addWidget(self.toggle_btn, 2)
         control_layout.addWidget(self.bypass_btn, 1)
@@ -170,14 +165,13 @@ class ToksiApp(QMainWindow):
             self.bypass_btn.setText("BYPASS (NATURAL VOICE)")
             self.bypass_btn.setStyleSheet("background-color: #374151; color: #9ca3af; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
             self.toggle_btn.setText("TURN ON TOK.SI")
-            self.toggle_btn.setStyleSheet("background-color: #10b981; color: white; padding: 16px; font-weight: 800; font-size: 13px; border: none;")
+            self.toggle_btn.setStyleSheet("background-color: #10b981; color: white; padding: 16px; font-weight: 800; font-size: 14px; border: none; margin-top: 5px;")
             self.status_label.setText("Ready")
             self.status_label.setStyleSheet("font-size: 12px; color: #9ca3af; font-weight: 600; background-color: #1f2937; padding: 4px 10px; border-radius: 12px;")
             self.equalizer.stop()
             self.stop_global_interception()
 
     def toggle_bypass(self):
-        """Allows users to cut off the DSP engine entirely without closing streams."""
         if not self.is_bypass:
             self.is_bypass = True
             self.bypass_btn.setText("PASSTHROUGH ON")
@@ -201,27 +195,31 @@ class ToksiApp(QMainWindow):
             
             raw_buffer = indata[:, 0]
             
-# EMERGENCY BYPASS HOOK: If enabled, route clean mic arrays directly with zero math shifts
-if self.is_bypass:
-outdata[:, 0] = raw_buffer
-return
-# Core DSP Frequency Accent Shifts
-pitch_shift_factor = 1.15 if self.selected_gender == "Female" else 0.85
-fft_data = np.fft.rfft(raw_buffer)
-shifted_fft = np.zeros_like(fft_data)
-for i in range(len(fft_data)):
-new_idx = int(i * pitch_shift_factor)
-if new_idx < len(shifted_fft):
-shifted_fft[new_idx] = fft_data[i]
-outdata[:, 0] = np.fft.irfft(shifted_fft, n=len(raw_buffer))
-self.stream = sd.Stream(device=(None, None), samplerate=16000, blocksize=512, channels=1, callback=audio_callback)
-self.stream.start()
-def stop_global_interception(self):
-if self.stream:
-self.stream.stop()
-self.stream.close()
-if name == "main":
-app = QApplication(sys.argv)
-window = ToksiApp()
-window.show()
-sys.exit(app.exec())
+            if self.is_bypass:
+                outdata[:, 0] = raw_buffer
+                return
+            
+            pitch_shift_factor = 1.15 if self.selected_gender == "Female" else 0.85
+            fft_data = np.fft.rfft(raw_buffer)
+            shifted_fft = np.zeros_like(fft_data)
+            
+            for i in range(len(fft_data)):
+                new_idx = int(i * pitch_shift_factor)
+                if new_idx < len(shifted_fft):
+                    shifted_fft[new_idx] = fft_data[i]
+            
+            outdata[:, 0] = np.fft.irfft(shifted_fft, n=len(raw_buffer))
+
+        self.stream = sd.Stream(device=(None, None), samplerate=16000, blocksize=512, channels=1, callback=audio_callback)
+        self.stream.start()
+
+    def stop_global_interception(self):
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ToksiApp()
+    window.show()
+    sys.exit(app.exec())
