@@ -1,9 +1,10 @@
 {
   "files": {
     "README.md": "7596bec8a63fd9f643906d103776fd3f860944fe8ab5e46fc272d1a54e045b4d",
+    "assets/toksi.png": "224a4a69bee6b2c3de4a5813c37bcfe8f6d66d434f7e7600621dd47752db885a",
     "beta_worker.py": "66065baca6f0b3c92757ef11552ddb44c0db768c13beb44344bdef541dd58e35",
     "fetch_assets.py": "8556f0f9f92c4f8c73f0ee287b5f705131ce647760784cf723210cc8137df9f8",
-    "main.py": "60f2e99d155559ccc418b7acbc4b55c64b9487f6713ecdb341942ff86f0acce9",
+    "main.py": "b5e39582f41cf9c4400493fb3de1663f5c6de187093ec44edaf17a28702e02ba",
     "setup.bat": "a34619cde45b15d0cac34df64330008c0a6b022c469677d8da85adf453b852a1",
     "start.bat": "669c18c6785faefbff75730a8352a9585ba0f8b19a587b0cb1933d5d7bea87d1"
   }

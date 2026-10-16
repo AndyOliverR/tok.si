@@ -13,8 +13,8 @@ from urllib.error import URLError
 
 import numpy as np
 import sounddevice as sd
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -29,12 +29,21 @@ from PySide6.QtWidgets import (
 )
 
 ROOT = Path(__file__).resolve().parent
+ICON_PATH = ROOT / "assets" / "toksi.png"
 STATE_PATH = ROOT / "toksi_state.json"
 LOG_PATH = ROOT / "toksi.log"
 MANIFEST_PATH = ROOT / "models" / "manifest.json"
 SHARE_URL = "https://github.com/AndyOliverR/tok.si"
 RAW_ROOT = "https://raw.githubusercontent.com/AndyOliverR/tok.si/main/"
-UPDATE_FILES = ("main.py", "fetch_assets.py", "setup.bat", "start.bat", "README.md", "beta_worker.py")
+UPDATE_FILES = (
+    "main.py",
+    "fetch_assets.py",
+    "setup.bat",
+    "start.bat",
+    "README.md",
+    "beta_worker.py",
+    "assets/toksi.png",
+)
 PUBLIC_KEY_PATH = ROOT / "toksi_update_key.pub"
 IMPROVE_PATH = ROOT / "toksi_improve.jsonl"
 PORT = 47651
@@ -104,6 +113,74 @@ SKINS = {
         "button_ink": "#e7ffc4",
     },
 }
+
+
+def app_icon():
+    if ICON_PATH.exists():
+        return QIcon(str(ICON_PATH))
+    return QIcon()
+
+
+def draw_badge(kind, color):
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(color)
+    pen.setWidth(2)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    if kind == "male":
+        painter.drawEllipse(11, 3, 10, 10)
+        painter.drawArc(5, 14, 22, 16, 0, -180 * 16)
+    elif kind == "female":
+        painter.drawEllipse(11, 5, 10, 10)
+        painter.drawArc(8, 2, 16, 14, 40 * 16, 140 * 16)
+        painter.drawArc(5, 16, 22, 16, 0, -180 * 16)
+    elif kind == "bridge":
+        painter.drawEllipse(4, 11, 10, 10)
+        painter.drawEllipse(18, 11, 10, 10)
+        painter.drawLine(14, 16, 18, 16)
+    elif kind == "bypass":
+        painter.drawRoundedRect(12, 3, 8, 12, 3, 3)
+        painter.drawLine(16, 15, 16, 21)
+        painter.drawArc(9, 14, 14, 10, 180 * 16, 180 * 16)
+        painter.drawLine(10, 26, 22, 26)
+    elif kind == "skin":
+        painter.drawRoundedRect(6, 8, 20, 16, 3, 3)
+        painter.drawLine(8, 20, 24, 10)
+    elif kind == "share":
+        painter.drawRoundedRect(4, 12, 14, 14, 2, 2)
+        painter.drawLine(14, 18, 26, 6)
+        painter.drawLine(18, 6, 26, 6)
+        painter.drawLine(26, 6, 26, 14)
+    elif kind == "improve":
+        painter.drawRoundedRect(8, 5, 16, 22, 2, 2)
+        painter.drawLine(12, 14, 20, 14)
+        painter.drawLine(12, 19, 18, 19)
+    else:
+        painter.drawLine(13, 4, 13, 10)
+        painter.drawLine(19, 4, 19, 10)
+        painter.drawLine(13, 10, 7, 26)
+        painter.drawLine(19, 10, 25, 26)
+        painter.drawLine(7, 26, 25, 26)
+        painter.drawLine(10, 20, 22, 20)
+    painter.end()
+    return pixmap
+
+
+def badge_icon(kind, ink):
+    icon = QIcon()
+    off = draw_badge(kind, QColor(ink))
+    on = draw_badge(kind, QColor("#111111"))
+    icon.addPixmap(off, QIcon.Mode.Normal, QIcon.State.Off)
+    icon.addPixmap(off, QIcon.Mode.Active, QIcon.State.Off)
+    icon.addPixmap(on, QIcon.Mode.Normal, QIcon.State.On)
+    icon.addPixmap(on, QIcon.Mode.Active, QIcon.State.On)
+    icon.addPixmap(on, QIcon.Mode.Selected, QIcon.State.On)
+    return icon
 
 
 def log(message):
@@ -212,6 +289,7 @@ def check_for_update():
         return "skip"
     for name, payload in staged.items():
         target = ROOT / name
+        target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".new")
         temporary.write_bytes(payload)
         os.replace(temporary, target)
@@ -306,6 +384,7 @@ class SetupWizard(QDialog):
         self.install_running = False
         self.action_mode = "next"
         self.setWindowTitle("tok.si")
+        self.setWindowIcon(app_icon())
         self.setMinimumWidth(420)
         layout = QVBoxLayout(self)
         self.words = QLabel()
@@ -493,6 +572,7 @@ class ToksiApp(QMainWindow):
         self.beta_live = False
         self.beta_proc = None
         self.setWindowTitle("tok.si")
+        self.setWindowIcon(app_icon())
         self.setFixedSize(460, 640)
         self.build_ui()
         self.apply_skin(self.state["skin"])
@@ -555,19 +635,30 @@ class ToksiApp(QMainWindow):
         layout.addWidget(self.list_frame, 1)
 
         controls = QHBoxLayout()
-        self.male_btn = QPushButton("MALE")
-        self.female_btn = QPushButton("FEMALE")
+        controls.setSpacing(6)
+        self.male_btn = QPushButton()
+        self.female_btn = QPushButton()
         self.male_btn.setCheckable(True)
         self.female_btn.setCheckable(True)
-        self.bridge_btn = QPushButton("BRIDGE")
-        self.bypass_btn = QPushButton("BYPASS")
-        self.skin_btn = QPushButton("SKIN")
-        self.share_btn = QPushButton("SHARE")
-        self.improve_btn = QPushButton("IMPROVE")
-        self.beta_btn = QPushButton("BETA")
+        self.bridge_btn = QPushButton()
+        self.bypass_btn = QPushButton()
+        self.skin_btn = QPushButton()
+        self.share_btn = QPushButton()
+        self.improve_btn = QPushButton()
+        self.beta_btn = QPushButton()
         self.bypass_btn.setCheckable(True)
         self.improve_btn.setCheckable(True)
         self.beta_btn.setCheckable(True)
+        self.male_btn.setProperty("badge", "male")
+        self.female_btn.setProperty("badge", "female")
+        self.bridge_btn.setProperty("badge", "bridge")
+        self.bypass_btn.setProperty("badge", "bypass")
+        self.skin_btn.setProperty("badge", "skin")
+        self.share_btn.setProperty("badge", "share")
+        self.improve_btn.setProperty("badge", "improve")
+        self.beta_btn.setProperty("badge", "beta")
+        self.skin_btn.setToolTip("Change the look")
+        self.share_btn.setToolTip("Copy the share link")
         for button, handler in (
             (self.male_btn, lambda: self.set_gender("Male")),
             (self.female_btn, lambda: self.set_gender("Female")),
@@ -579,6 +670,8 @@ class ToksiApp(QMainWindow):
             (self.beta_btn, self.toggle_beta),
         ):
             button.clicked.connect(handler)
+            button.setFixedSize(48, 40)
+            button.setIconSize(QSize(22, 22))
             controls.addWidget(button)
         layout.addLayout(controls)
         self.setCentralWidget(shell)
@@ -629,6 +722,17 @@ class ToksiApp(QMainWindow):
             }}
             """
         )
+        for button in (
+            self.male_btn,
+            self.female_btn,
+            self.bridge_btn,
+            self.bypass_btn,
+            self.skin_btn,
+            self.share_btn,
+            self.improve_btn,
+            self.beta_btn,
+        ):
+            button.setIcon(badge_icon(button.property("badge"), skin["button_ink"]))
         self.equalizer.color = QColor(skin["bar"])
         self.equalizer.update()
 
@@ -642,17 +746,22 @@ class ToksiApp(QMainWindow):
         male = self.state["gender"] == "Male"
         self.male_btn.setChecked(male)
         self.female_btn.setChecked(not male)
+        self.male_btn.setToolTip("Male voice")
+        self.female_btn.setToolTip("Female voice")
         if self.state["accent_on"]:
-            self.bridge_btn.setText("BRIDGE ON")
+            self.bridge_btn.setToolTip("American voice on")
             self.mode_label.setText("ACCENT ON")
         else:
-            self.bridge_btn.setText("BRIDGE OFF")
+            self.bridge_btn.setToolTip("Your microphone")
             self.mode_label.setText("YOUR MIC")
-        self.bypass_btn.setText("BYPASS ON" if self.bypass_on else "BYPASS")
-        self.improve_btn.setChecked(bool(self.state.get("improve")))
-        self.improve_btn.setText("IMPROVE ON" if self.state.get("improve") else "IMPROVE")
+        self.bypass_btn.setToolTip("Raw microphone on" if self.bypass_on else "Accent path")
+        saving = bool(self.state.get("improve"))
+        self.improve_btn.setChecked(saving)
+        self.improve_btn.setToolTip(
+            "Save a rejected line on this PC" if saving else "Saving a rejected line is off"
+        )
         self.beta_btn.setChecked(bool(self.beta_live))
-        self.beta_btn.setText("BETA ON" if self.beta_live else "BETA")
+        self.beta_btn.setToolTip("Slow converter on" if self.beta_live else "Slow converter off")
 
     def set_gender(self, gender):
         self.state["gender"] = gender
@@ -1174,8 +1283,12 @@ class ToksiApp(QMainWindow):
 def main():
     show = "--show" in sys.argv
     server = claim_instance(show)
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("tok.si")
     app = QApplication(sys.argv)
     app.setApplicationName("tok.si")
+    app.setWindowIcon(app_icon())
     app.setQuitOnLastWindowClosed(False)
     window = ToksiApp(server)
     if show or not window.state.get("mic_ready"):
