@@ -9,6 +9,7 @@ import cryptography  # noqa: F401
 import numpy  # noqa: F401
 import sherpa_onnx  # noqa: F401
 import sounddevice  # noqa: F401
+from PySide6 import QtSvg  # noqa: F401
 from PySide6 import QtWidgets  # noqa: F401
 
 

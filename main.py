@@ -14,7 +14,8 @@ from urllib.error import URLError
 import numpy as np
 import sounddevice as sd
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -121,52 +122,26 @@ def app_icon():
     return QIcon()
 
 
+# Button marks are Lucide icons, ISC license, https://lucide.dev
+BADGES = {
+    "male": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="m21 3-6.75 6.75"/><circle cx="10" cy="14" r="6"/></svg>',
+    "female": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15v7"/><path d="M9 19h6"/><circle cx="12" cy="9" r="6"/></svg>',
+    "bridge": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    "bypass": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>',
+    "skin": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></svg>',
+    "share": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg>',
+    "improve": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
+    "beta": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></svg>',
+}
+
+
 def draw_badge(kind, color):
-    pixmap = QPixmap(32, 32)
+    svg = BADGES[kind].replace("currentColor", QColor(color).name())
+    renderer = QSvgRenderer(svg.encode("utf-8"))
+    pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    pen = QPen(color)
-    pen.setWidth(2)
-    pen.setCapStyle(Qt.RoundCap)
-    pen.setJoinStyle(Qt.RoundJoin)
-    painter.setPen(pen)
-    painter.setBrush(Qt.NoBrush)
-    if kind == "male":
-        painter.drawEllipse(11, 3, 10, 10)
-        painter.drawArc(5, 14, 22, 16, 0, -180 * 16)
-    elif kind == "female":
-        painter.drawEllipse(11, 5, 10, 10)
-        painter.drawArc(8, 2, 16, 14, 40 * 16, 140 * 16)
-        painter.drawArc(5, 16, 22, 16, 0, -180 * 16)
-    elif kind == "bridge":
-        painter.drawEllipse(4, 11, 10, 10)
-        painter.drawEllipse(18, 11, 10, 10)
-        painter.drawLine(14, 16, 18, 16)
-    elif kind == "bypass":
-        painter.drawRoundedRect(12, 3, 8, 12, 3, 3)
-        painter.drawLine(16, 15, 16, 21)
-        painter.drawArc(9, 14, 14, 10, 180 * 16, 180 * 16)
-        painter.drawLine(10, 26, 22, 26)
-    elif kind == "skin":
-        painter.drawRoundedRect(6, 8, 20, 16, 3, 3)
-        painter.drawLine(8, 20, 24, 10)
-    elif kind == "share":
-        painter.drawRoundedRect(4, 12, 14, 14, 2, 2)
-        painter.drawLine(14, 18, 26, 6)
-        painter.drawLine(18, 6, 26, 6)
-        painter.drawLine(26, 6, 26, 14)
-    elif kind == "improve":
-        painter.drawRoundedRect(8, 5, 16, 22, 2, 2)
-        painter.drawLine(12, 14, 20, 14)
-        painter.drawLine(12, 19, 18, 19)
-    else:
-        painter.drawLine(13, 4, 13, 10)
-        painter.drawLine(19, 4, 19, 10)
-        painter.drawLine(13, 10, 7, 26)
-        painter.drawLine(19, 10, 25, 26)
-        painter.drawLine(7, 26, 25, 26)
-        painter.drawLine(10, 20, 22, 20)
+    renderer.render(painter)
     painter.end()
     return pixmap
 
@@ -671,7 +646,7 @@ class ToksiApp(QMainWindow):
         ):
             button.clicked.connect(handler)
             button.setFixedSize(48, 40)
-            button.setIconSize(QSize(22, 22))
+            button.setIconSize(QSize(24, 24))
             controls.addWidget(button)
         layout.addLayout(controls)
         self.setCentralWidget(shell)
