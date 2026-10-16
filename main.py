@@ -57,6 +57,9 @@ SKIP_TEXT = {
     ".",
 }
 
+# Kokoro en v0.19 speaker ids. am_michael is American male. af_sarah is American female.
+KOKORO_SID = {"male": 6, "female": 3}
+
 SKINS = {
     "Silver": {
         "window": "#d5d8df",
@@ -151,7 +154,20 @@ def fetch_bytes(url):
         return response.read()
 
 
-def file_sha256(path):
+def load_converter():
+    path = ROOT / "converter.py"
+    if not path.exists():
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("toksi_converter", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "convert", None)):
+        log("converter.py has no convert function")
+        return None
+    return module
     digest = hashlib.sha256()
     digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -349,7 +365,7 @@ class SetupWizard(QDialog):
         if self.voices_running or self.voices_done.is_set():
             return
         self.voices_running = True
-        self.words.setText("Getting the voices. Keep this window open.")
+        self.words.setText("Getting the voices. The first time can take a few minutes. Keep this window open.")
         self.set_action("NEXT", "wait", False)
         threading.Thread(target=self._voices, daemon=True).start()
 
@@ -741,6 +757,8 @@ class ToksiApp(QMainWindow):
             self.setup_done.wait()
         try:
             import fetch_assets
+            self.status_queue.put("GETTING THE VOICES")
+            fetch_assets.ensure_voices()
             if fetch_assets.cable_present():
                 fetch_assets.ensure_shortcuts()
         except Exception as exc:
@@ -926,6 +944,11 @@ class ToksiApp(QMainWindow):
     def engine_loop(self):
         recognizer = None
         voices = {}
+        try:
+            self.converter_module = load_converter()
+        except Exception as exc:
+            log(f"converter load failed: {exc}")
+            self.converter_module = None
         if self.manifest:
             try:
                 import sherpa_onnx
@@ -947,7 +970,13 @@ class ToksiApp(QMainWindow):
         silent = 0
         in_speech = False
         silence_need = int(SILENCE_SECONDS * STREAM_RATE)
-        speech_need = int(SPEECH_SECONDS * STREAM_RATE)
+        speech_seconds = SPEECH_SECONDS
+        module = self.converter_module
+        if module is not None:
+            custom = getattr(module, "SLICE_SECONDS", None)
+            if isinstance(custom, (int, float)) and float(custom) > 0:
+                speech_seconds = float(custom)
+        speech_need = int(speech_seconds * STREAM_RATE)
         while not self.stop_event.is_set():
             try:
                 piece = self.input_queue.get(timeout=0.2)
@@ -982,15 +1011,30 @@ class ToksiApp(QMainWindow):
             if len(audio) < int(0.25 * STREAM_RATE):
                 continue
             try:
-                text = self.transcribe(recognizer, audio)
-                if not text or text.lower().strip(" .") in SKIP_TEXT:
-                    continue
-                samples, rate = self.speak(voices, text)
+                played = False
+                if self.converter_module is not None:
+                    try:
+                        result = self.converter_module.convert(
+                            np.asarray(audio, dtype=np.float32),
+                            STREAM_RATE,
+                        )
+                    except Exception as exc:
+                        log(f"converter failed: {exc}")
+                        result = None
+                    if result is not None:
+                        samples, rate = result
+                        played = True
+                        self.status_queue.put("CONVERTER")
+                if not played:
+                    text = self.transcribe(recognizer, audio)
+                    if not text or text.lower().strip(" .") in SKIP_TEXT:
+                        continue
+                    samples, rate = self.speak(voices, text)
+                    self.status_queue.put(text[:80])
                 if rate != STREAM_RATE and len(samples):
                     samples = self.resample(samples, rate, STREAM_RATE)
                 if len(samples):
                     self.enqueue_audio(samples)
-                    self.status_queue.put(text[:80])
             except Exception as exc:
                 log(f"voice step failed: {exc}")
 
@@ -1001,9 +1045,43 @@ class ToksiApp(QMainWindow):
         return stream.result.text.strip()
 
     def speak(self, voices, text):
+        try:
+            return self.speak_kokoro(voices, text)
+        except Exception as exc:
+            log(f"kokoro failed: {exc}")
+            return self.speak_piper(voices, text)
+
+    def speak_kokoro(self, voices, text):
+        import sherpa_onnx
+        if "kokoro_model" not in self.manifest:
+            raise RuntimeError("kokoro voice is not installed")
+        if "kokoro" not in voices:
+            config = sherpa_onnx.OfflineTtsConfig(
+                model=sherpa_onnx.OfflineTtsModelConfig(
+                    kokoro=sherpa_onnx.OfflineTtsKokoroModelConfig(
+                        model=self.manifest["kokoro_model"],
+                        voices=self.manifest["kokoro_voices"],
+                        tokens=self.manifest["kokoro_tokens"],
+                        data_dir=self.manifest["kokoro_data"],
+                    ),
+                    num_threads=2,
+                    provider="cpu",
+                ),
+                max_num_sentences=1,
+            )
+            if not config.validate():
+                raise RuntimeError("voice file is not valid")
+            voices["kokoro"] = sherpa_onnx.OfflineTts(config)
+        gender = "male" if self.state["gender"] == "Male" else "female"
+        audio = voices["kokoro"].generate(text, sid=KOKORO_SID[gender], speed=1.0)
+        return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
+
+    def speak_piper(self, voices, text):
         import sherpa_onnx
         gender = self.state["gender"]
         key = "male" if gender == "Male" else "female"
+        if f"{key}_model" not in self.manifest:
+            raise RuntimeError("no spare voice is installed")
         if key not in voices:
             config = sherpa_onnx.OfflineTtsConfig(
                 model=sherpa_onnx.OfflineTtsModelConfig(

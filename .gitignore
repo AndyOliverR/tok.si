@@ -9,3 +9,4 @@ release_ed25519.key
 dist/
 build/
 *.spec
+converter.py

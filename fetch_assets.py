@@ -17,6 +17,9 @@ VOICES = {
     "male": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-ryan-medium.tar.bz2",
     "female": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2",
 }
+KOKORO_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2"
+WHISPER_KEYS = ("whisper_encoder", "whisper_decoder", "whisper_tokens")
+KOKORO_KEYS = ("kokoro_model", "kokoro_voices", "kokoro_tokens", "kokoro_data")
 WHISPER_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2"
 CABLE_URL = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
 
@@ -25,14 +28,14 @@ def say(message):
     print(message, flush=True)
 
 
-def download(url, dest, min_size):
+def download(url, dest, min_size, timeout=180):
     dest.parent.mkdir(parents=True, exist_ok=True)
     last_error = None
     for attempt in range(1, 3):
         try:
             say(f"Downloading {dest.name} (try {attempt}/2)...")
             request = urllib.request.Request(url, headers={"User-Agent": "tok.si"})
-            with urllib.request.urlopen(request, timeout=180) as response, open(dest, "wb") as handle:
+            with urllib.request.urlopen(request, timeout=timeout) as response, open(dest, "wb") as handle:
                 first = response.read(64)
                 lowered = first.lower()
                 if b"<html" in lowered or b"<!doctype" in lowered:
@@ -80,42 +83,82 @@ def voice_paths(root):
     return model, tokens, data_dirs[0]
 
 
+def load_manifest():
+    if not MANIFEST.exists():
+        return {}
+    try:
+        data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def paths_ready(data, keys):
+    for key in keys:
+        value = str(data.get(key, "")).strip()
+        if not value or not Path(value).exists():
+            return False
+    return True
+
+
+def kokoro_paths(root):
+    model = first_match(root, "model.onnx")
+    voices = first_match(root, "voices.bin")
+    tokens = first_match(root, "tokens.txt")
+    data_dirs = [path for path in root.rglob("espeak-ng-data") if path.is_dir()]
+    if not model or not voices or not tokens or not data_dirs:
+        raise RuntimeError(f"Kokoro voice files are incomplete in {root}")
+    return model, voices, tokens, data_dirs[0]
+
+
 def ensure_voices():
     MODELS.mkdir(parents=True, exist_ok=True)
-    if MANIFEST.exists():
-        try:
-            data = json.loads(MANIFEST.read_text(encoding="utf-8"))
-            if all(Path(data[key]).exists() for key in data):
-                say("Voice files are already in place.")
-                return
-        except Exception:
-            pass
+    manifest = load_manifest()
+    if paths_ready(manifest, WHISPER_KEYS) and paths_ready(manifest, KOKORO_KEYS):
+        say("Voice files are already in place.")
+        return
     cache = MODELS / "_downloads"
     cache.mkdir(parents=True, exist_ok=True)
-    whisper_archive = cache / "whisper.tar.bz2"
-    download(WHISPER_URL, whisper_archive, 50_000_000)
-    whisper_root = MODELS / "whisper"
-    if whisper_root.exists():
-        shutil.rmtree(whisper_root)
-    extract_tar(whisper_archive, whisper_root)
-    encoder = first_match(whisper_root, "*encoder*.onnx", prefer="int8")
-    decoder = first_match(whisper_root, "*decoder*.onnx", prefer="int8")
-    tokens = first_match(whisper_root, "*tokens.txt")
-    if not encoder or not decoder or not tokens:
-        raise RuntimeError("the speech model did not contain the expected files")
-    manifest = {
-        "whisper_encoder": str(encoder),
-        "whisper_decoder": str(decoder),
-        "whisper_tokens": str(tokens),
-    }
-    for name, url in VOICES.items():
-        archive = cache / f"{name}.tar.bz2"
-        download(url, archive, 40_000_000)
-        voice_root = MODELS / name
+    if not paths_ready(manifest, WHISPER_KEYS):
+        whisper_archive = cache / "whisper.tar.bz2"
+        download(WHISPER_URL, whisper_archive, 50_000_000)
+        whisper_root = MODELS / "whisper"
+        if whisper_root.exists():
+            shutil.rmtree(whisper_root)
+        extract_tar(whisper_archive, whisper_root)
+        encoder = first_match(whisper_root, "*encoder*.onnx", prefer="int8")
+        decoder = first_match(whisper_root, "*decoder*.onnx", prefer="int8")
+        tokens = first_match(whisper_root, "*tokens.txt")
+        if not encoder or not decoder or not tokens:
+            raise RuntimeError("the speech model did not contain the expected files")
+        manifest["whisper_encoder"] = str(encoder)
+        manifest["whisper_decoder"] = str(decoder)
+        manifest["whisper_tokens"] = str(tokens)
+    if not paths_ready(manifest, KOKORO_KEYS):
+        archive = cache / "kokoro-en-v0_19.tar.bz2"
+        download(KOKORO_URL, archive, 50_000_000, timeout=600)
+        voice_root = MODELS / "kokoro"
         if voice_root.exists():
             shutil.rmtree(voice_root)
         extract_tar(archive, voice_root)
-        model, voice_tokens, data_dir = voice_paths(voice_root)
+        model, voices, tokens, data_dir = kokoro_paths(voice_root)
+        manifest["kokoro_model"] = str(model)
+        manifest["kokoro_voices"] = str(voices)
+        manifest["kokoro_tokens"] = str(tokens)
+        manifest["kokoro_data"] = str(data_dir)
+    for name, url in VOICES.items():
+        if paths_ready(manifest, (f"{name}_model", f"{name}_tokens", f"{name}_data")):
+            continue
+        archive = cache / f"{name}.tar.bz2"
+        if not archive.exists():
+            continue
+        voice_root = MODELS / name
+        if not voice_root.exists():
+            extract_tar(archive, voice_root)
+        try:
+            model, voice_tokens, data_dir = voice_paths(voice_root)
+        except RuntimeError:
+            continue
         manifest[f"{name}_model"] = str(model)
         manifest[f"{name}_tokens"] = str(voice_tokens)
         manifest[f"{name}_data"] = str(data_dir)

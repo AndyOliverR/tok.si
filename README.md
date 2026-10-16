@@ -2,7 +2,9 @@
 
 Put on your headset and talk. The person on the call hears an American English voice. You hear them in your headset as usual.
 
-There is a short wait. tok.si sends the line when you pause, or after about a second if you keep going. Your own voice is not kept. **BYPASS** sends your microphone through with no wait.
+There is a short wait. tok.si sends the line when you pause, or after about a second if you keep going. The other person hears an American male or female voice saying that line. Your own voice is not kept. **BYPASS** sends your microphone through with no wait.
+
+This is for a normal call. It can still change a word. A police, SPOC, or guard call stays on the tool you already trust until you have listened and the words match.
 
 ## Install
 
@@ -23,14 +25,14 @@ The last step in the window tells you to set only the microphone to **CABLE Outp
 Search Windows for **tok.si**.
 
 - **BRIDGE** turns the American voice off or on. Closing the window does not turn it off.
-- **MALE** and **FEMALE** choose the voice.
+- **MALE** and **FEMALE** choose the American voice.
 - **BYPASS** sends your own mic through instantly.
 - **SKIN** switches the Silver, Classic, and Lime looks.
 - **SHARE** copies https://github.com/AndyOliverR/tok.si
 - **IMPROVE** is off until you turn it on. A line you reject with **BYPASS** is saved on this PC only. Nothing is uploaded.
-- **BETA** is off until you turn it on. It tries a live voice converter on this PC. If that converter cannot keep up, the window says **BETA UNAVAILABLE** and the American reader keeps the call.
+- **BETA** is off until you turn it on. It tries a live voice converter on this PC. If that converter cannot keep up, the window says **BETA UNAVAILABLE** and the American voice keeps the call.
 
-This is for a normal call. It can still miss a word.
+Notes for a manager are in [docs/FOR_MANAGERS.md](docs/FOR_MANAGERS.md). Notes for an engineer who will connect a converter are in [docs/FOR_ENGINEERS.md](docs/FOR_ENGINEERS.md).
 
 ## Updates
 
