@@ -1,10 +1,11 @@
 {
   "files": {
     "README.md": "bb6f99969d27a3c7bea09268b577d2a50a5d6d819435f588ae9b7ccec368e1bf",
+    "assets/toksi.ico": "502bf51c99332fdc793497a5dac3753e035d30b42d4d702683314035e86dcacd",
     "assets/toksi.png": "224a4a69bee6b2c3de4a5813c37bcfe8f6d66d434f7e7600621dd47752db885a",
     "beta_worker.py": "ef10b4cd11ac25f293a4432bc4fa8fa81393abe825613064257e02495bb731c9",
-    "fetch_assets.py": "8556f0f9f92c4f8c73f0ee287b5f705131ce647760784cf723210cc8137df9f8",
-    "main.py": "abd34e88ad6e94f2a108729d950f651ba3c64207c64e0ca025f7d2fefb421c80",
+    "fetch_assets.py": "745a28435e7daf501b86810ac4a618ce564dc15828a982bd754d05ac5566cd99",
+    "main.py": "ebf2365783eeaf1c1ec4f4684eb1a703bff0313fee1831f1c902888dfc19de23",
     "setup.bat": "329b96c143a0dc52e41d27865faeefd31af3d3bb0edb8fe7b0023d60cb9ce03f",
     "start.bat": "669c18c6785faefbff75730a8352a9585ba0f8b19a587b0cb1933d5d7bea87d1"
   }

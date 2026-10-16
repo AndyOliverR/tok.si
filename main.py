@@ -44,6 +44,7 @@ UPDATE_FILES = (
     "README.md",
     "beta_worker.py",
     "assets/toksi.png",
+    "assets/toksi.ico",
 )
 PUBLIC_KEY_PATH = ROOT / "toksi_update_key.pub"
 IMPROVE_PATH = ROOT / "toksi_improve.jsonl"

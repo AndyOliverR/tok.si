@@ -205,19 +205,23 @@ def ps_quote(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def write_shortcut(path, target, arguments):
+def write_shortcut(path, target, arguments, icon):
     path.parent.mkdir(parents=True, exist_ok=True)
     script = (
         f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut({ps_quote(path)}); "
         f"$s.TargetPath = {ps_quote(target)}; "
         f"$s.Arguments = {ps_quote(arguments)}; "
         f"$s.WorkingDirectory = {ps_quote(ROOT)}; "
+        f"$s.IconLocation = {ps_quote(str(icon) + ',0')}; "
         f"$s.Save()"
     )
     subprocess.check_call(["powershell", "-NoProfile", "-Command", script])
 
 
 def ensure_shortcuts():
+    icon = ROOT / "assets" / "toksi.ico"
+    if not icon.exists():
+        icon = ROOT / "assets" / "toksi.png"
     exe = Path(sys.executable)
     if exe.name.lower() == "tok.si.exe":
         target = exe
@@ -231,8 +235,8 @@ def ensure_shortcuts():
         start_args = f'"{ROOT / "main.py"}"'
     appdata = Path(os.environ["APPDATA"])
     programs = appdata / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-    write_shortcut(programs / "tok.si.lnk", target, show_args)
-    write_shortcut(programs / "Startup" / "tok.si.lnk", target, start_args)
+    write_shortcut(programs / "tok.si.lnk", target, show_args, icon)
+    write_shortcut(programs / "Startup" / "tok.si.lnk", target, start_args, icon)
     say("tok.si will start at login. Search tok.si in Windows to open the window.")
 
 

@@ -18,6 +18,7 @@ FILES = (
     "README.md",
     "beta_worker.py",
     "assets/toksi.png",
+    "assets/toksi.ico",
 )
 
 
