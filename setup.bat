@@ -30,7 +30,10 @@ echo ===================================================
 echo  SETUP COMPLETE
 echo  In your call app, set the microphone to
 echo  CABLE Output (VB-Audio Virtual Cable).
-echo  Leave the speaker on your headphones.
+echo  Leave the speaker on your headset.
+echo  Meet: Settings, then Audio.
+echo  WhatsApp: Settings, then Video and audio.
+echo  QUO: the gear on the call.
 echo  Search tok.si in Windows to turn it off.
 echo ===================================================
 pause

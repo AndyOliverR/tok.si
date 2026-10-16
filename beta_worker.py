@@ -1,4 +1,4 @@
-"""Runs inside the local Seed-VC environment. The call keeps the reader unless a chunk is fast enough."""
+"""Runs inside the local Seed-VC environment. The call keeps the American voice unless a chunk is fast enough."""
 
 import sys
 import time
@@ -20,7 +20,7 @@ def time_chunk():
         print("SLOW no cuda")
         return 1
     # A live chunk has to finish before the next one arrives. Loading the
-    # converter is not that fast, so the reader stays on the call.
+    # converter is not that fast, so the American voice stays on the call.
     elapsed = time.perf_counter() - started
     print(f"SLOW {elapsed:.2f}")
     return 1

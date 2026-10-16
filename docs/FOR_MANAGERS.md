@@ -12,19 +12,31 @@ The finished app is a repeater.
 4. That audio goes out through a virtual microphone named **CABLE Output**.
 5. The call app uses **CABLE Output** as its microphone. The speaker stays the headset.
 
-**MALE** and **FEMALE** are two different American voices. The voice in this build is Kokoro, which is smoother than the earlier Piper voice. It is still a studio voice, not the caller's voice.
+The male and female symbols are two different American voices. The voice in this build is Kokoro. It is a studio voice, not the caller's voice. The other buttons are a link, a microphone, a palette, a share arrow, a pencil, and a flask. Hold the pointer on a button to read it.
 
 There is a short wait before each line: a pause of about 0.2 seconds, or about 1 second of speech, then the time to recognize and speak. A short word can still come out as a different word. On a call that runs 5 to 20 minutes, the other person can hear that wait.
 
-**BYPASS** sends the caller's own microphone through with no wait and no new voice.
+The microphone button sends the caller's own microphone through with no wait and no new voice.
 
-Nothing from the call is uploaded. A rejected line can be saved on that PC only, and only if **IMPROVE** is on. That file does not train the voice.
+Nothing from the call is uploaded. A rejected line can be saved on that PC only, and only if the pencil is on. That file does not train the voice.
 
 ## What a basic call tomorrow is
 
 Install, finish the window (voices, cable, headset, microphone), set the call microphone to **CABLE Output**, leave the speaker on the headset, and talk.
 
 Use it on an ordinary test call. Police, SPOC, and guard calls stay on the tool the office already trusts until a person has listened and the words match for a full call.
+
+## Where the call app is set
+
+Only the microphone changes. The speaker stays the headset. The microphone name is **CABLE Output (VB-Audio Virtual Cable)**.
+
+- Google Meet: gear, **Settings**, **Audio**.
+- WhatsApp for Windows: gear, **Video and audio** (some copies say **Voice and video**).
+- QUO: the gear on the Make a call window or during the call.
+- Zoom: gear, **Settings**, **Audio**.
+- Slack: the arrow beside the microphone in a huddle, or **Preferences**, **Audio and video**.
+
+The same steps are in the README. GitHub hosts the download. It has no call microphone.
 
 ## What this is not
 

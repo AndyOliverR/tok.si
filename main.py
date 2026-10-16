@@ -409,8 +409,13 @@ class SetupWizard(QDialog):
             self.set_action("NEXT", "next", True)
         else:
             self.words.setText(
-                "In your call app, set only the microphone to CABLE Output (VB-Audio Virtual Cable). "
-                "Leave the speaker on your headset."
+                "Set only the microphone to CABLE Output (VB-Audio Virtual Cable). "
+                "Leave the speaker on your headset. "
+                "Meet: Settings, then Audio. "
+                "WhatsApp: Settings, then Video and audio. "
+                "QUO: the gear on the call. "
+                "Zoom: Settings, then Audio. "
+                "Slack: the arrow beside the microphone."
             )
             self.app_row.show()
             self.set_action("I DID THAT", "done", True)

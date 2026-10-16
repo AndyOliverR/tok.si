@@ -18,19 +18,43 @@ If you are running the source folder, right-click `setup.bat` and choose **Run a
 
 ## The one change in the call app
 
-The last step in the window tells you to set only the microphone to **CABLE Output (VB-Audio Virtual Cable)** and leave the speaker on your headset. It can open Zoom, Google Meet, Slack, or WhatsApp. QUO uses the same microphone name. Press **I DID THAT** when that is set. Later calls are just the headset and tok.si.
+Set only the microphone to **CABLE Output (VB-Audio Virtual Cable)**. Leave the speaker on your headset. If the speaker is also set to CABLE, you hear yourself and the other person does not hear the room.
+
+Press **I DID THAT** in the tok.si window when that is set. The window can open Zoom, Google Meet, Slack, or WhatsApp. Later calls are the headset and tok.si.
+
+### Google Meet
+
+Open the gear, then **Settings**, then **Audio**. Microphone: **CABLE Output (VB-Audio Virtual Cable)**. Speaker: your headset. You can do this on the join screen or during the call. More options, then **Settings**, then **Audio**, is the same page.
+
+### WhatsApp
+
+On WhatsApp for Windows, open the gear at the bottom left, then **Video and audio**. Some copies of the app call that page **Voice and video**. Microphone: **CABLE Output (VB-Audio Virtual Cable)**. Speaker: your headset.
+
+### QUO
+
+On the Make a call window, or during a call, click the gear. Microphone: **CABLE Output (VB-Audio Virtual Cable)**. Speaker: your headset. The change applies without hanging up. [QUO’s calling notes](https://support.quo.com/core-concepts/calling/making-calls) describe that gear.
+
+### Zoom
+
+Open the gear, then **Settings**, then **Audio**. Microphone: **CABLE Output (VB-Audio Virtual Cable)**. Speaker: your headset.
+
+### Slack
+
+In a huddle, open the arrow beside the microphone. Or open **Preferences**, then **Audio and video**. Microphone: **CABLE Output (VB-Audio Virtual Cable)**. Speaker: your headset.
+
+GitHub is where you download tok.si. It has no call microphone to change.
 
 ## The window
 
-Search Windows for **tok.si**.
+Search Windows for **tok.si**. The buttons are symbols. Hold the pointer on one to read it.
 
-- **BRIDGE** turns the American voice off or on. Closing the window does not turn it off.
-- **MALE** and **FEMALE** choose the American voice.
-- **BYPASS** sends your own mic through instantly.
-- **SKIN** switches the Silver, Classic, and Lime looks.
-- **SHARE** copies https://github.com/AndyOliverR/tok.si
-- **IMPROVE** is off until you turn it on. A line you reject with **BYPASS** is saved on this PC only. Nothing is uploaded.
-- **BETA** is off until you turn it on. It tries a live voice converter on this PC. If that converter cannot keep up, the window says **BETA UNAVAILABLE** and the American voice keeps the call.
+- Male and female symbols choose the American voice.
+- The link turns that voice off or on. Closing the window does not turn it off. The green line says **ACCENT ON** or **YOUR MIC**.
+- The microphone sends your own mic through instantly.
+- The palette switches the Silver, Classic, and Lime looks.
+- The arrow copies https://github.com/AndyOliverR/tok.si
+- The pencil is off until you turn it on. A line you reject with the microphone button is saved on this PC only. Nothing is uploaded.
+- The flask is off until you turn it on. It tries a live voice converter on this PC. If that converter cannot keep up, the window says **BETA UNAVAILABLE** and the American voice keeps the call.
 
 Notes for a manager are in [docs/FOR_MANAGERS.md](docs/FOR_MANAGERS.md). Notes for an engineer who will connect a converter are in [docs/FOR_ENGINEERS.md](docs/FOR_ENGINEERS.md).
 

@@ -8,7 +8,7 @@ The app that ships is a repeater. Your job is to connect a converter. You do not
 - Audio is 48000 Hz, mono, float32. The stream callback only copies samples. It does not run a model.
 - A worker (`engine_loop` in [main.py](../main.py)) cuts a phrase when the caller pauses for about 0.2 seconds or has spoken for about 1 second.
 - The phrase is transcribed with local Whisper tiny.en, then spoken with Kokoro English v0.19 through sherpa-onnx.
-- Male is Kokoro speaker `am_michael` (id 6). Female is `af_sarah` (id 3).
+- The male and female symbols choose Kokoro speakers `am_michael` (id 6) and `af_sarah` (id 3). The buttons are icons. The hover tip is the label.
 - If Kokoro fails to load, the older Piper voice speaks, when those files are still on the PC.
 - **BETA** is off. It is not the converter you are adding.
 - Call audio is not uploaded. Do not add an uploader.
